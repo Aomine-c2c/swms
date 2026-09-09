@@ -1,0 +1,13 @@
+node_modules/
+.venv/
+__pycache__/
+*.pyc
+.env
+.env.local
+.DS_Store
+out/
+.next/
+dist/
+build/
+src-tauri/target/
+db.sqlite3
