@@ -51,6 +51,7 @@ class VehicleViewSet(MasterDataViewSet):
     queryset = Vehicle.objects.all().order_by('license_plate')
     serializer_class = VehicleSerializer
     search_fields = ['license_plate', 'vehicle_type']
+    filterset_fields = ['status', 'carrier']
 
 class DriverViewSet(MasterDataViewSet):
     queryset = Driver.objects.all().order_by('name')

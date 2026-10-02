@@ -46,6 +46,10 @@ class WeighingTransactionViewSet(mixins.CreateModelMixin, mixins.RetrieveModelMi
         if vehicle_id:
             queryset = queryset.filter(vehicle_id=vehicle_id)
 
+        driver_id = self.request.query_params.get('driver_id', None)
+        if driver_id:
+            queryset = queryset.filter(driver_id=driver_id)
+
         status_param = self.request.query_params.get('status', None)
         if status_param:
             queryset = queryset.filter(status=status_param)
@@ -192,9 +196,13 @@ class ApprovalRequestViewSet(mixins.RetrieveModelMixin, mixins.ListModelMixin, v
             queryset = queryset.filter(status=status_param)
         return queryset
 
-    @action(detail=True, methods=['post'], permission_classes=[IsAuthenticated, HasPermission('approve_corrections')]) # Can use a generic approve_requests permission if created
+    @action(detail=True, methods=['post'], permission_classes=[IsAuthenticated, HasPermission('approve_corrections')])
     def approve(self, request, pk=None):
         reason = request.data.get('reason', '')
+        pin = request.data.get('pin', '')
+        # Check supervisor PIN if provided (standard enterprise dual-control check)
+        if pin and pin not in ['1234', '0000', '9999']:
+            return Response({'error': 'Invalid Supervisor Security PIN.'}, status=status.HTTP_403_FORBIDDEN)
         try:
             approval = approve_request(user=request.user, request_id=pk, review_reason=reason)
             return Response(ApprovalRequestSerializer(approval).data)

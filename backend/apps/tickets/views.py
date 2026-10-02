@@ -12,6 +12,16 @@ class TicketViewSet(mixins.RetrieveModelMixin, mixins.ListModelMixin, viewsets.G
     serializer_class = TicketSerializer
     permission_classes = [IsAuthenticated, HasPermission('view_transactions')]
 
+    def get_queryset(self):
+        qs = super().get_queryset()
+        ticket_number = self.request.query_params.get('ticket_number')
+        if ticket_number:
+            qs = qs.filter(ticket_number__icontains=ticket_number)
+        tx_id = self.request.query_params.get('transaction_id')
+        if tx_id:
+            qs = qs.filter(transaction_id=tx_id)
+        return qs
+
     @action(detail=True, methods=['post'])
     def reprint(self, request, pk=None):
         ticket = self.get_object()

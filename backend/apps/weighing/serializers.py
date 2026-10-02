@@ -30,6 +30,7 @@ class CreateWeighingTransactionSerializer(serializers.ModelSerializer):
 
 class CompleteWeighingTransactionSerializer(serializers.Serializer):
     weight = serializers.DecimalField(max_digits=10, decimal_places=2, required=True)
+    remarks = serializers.CharField(required=False, allow_blank=True, allow_null=True)
     is_manual_entry = serializers.BooleanField(required=False, default=False)
     manual_entry_reason = serializers.CharField(max_length=255, required=False, allow_blank=True, allow_null=True)
 

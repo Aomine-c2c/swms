@@ -35,7 +35,7 @@ def create_weighing_transaction(user, weight_type, weight, **kwargs):
     return trans
 
 @transaction.atomic
-def complete_weighing_transaction(user, transaction_id, weight, is_manual_entry=False, manual_entry_reason=None):
+def complete_weighing_transaction(user, transaction_id, weight, remarks=None, is_manual_entry=False, manual_entry_reason=None):
     trans = WeighingTransaction.objects.get(id=transaction_id)
     if trans.status != 'Open':
         raise ValidationError("Only Open transactions can be completed directly.")
@@ -47,6 +47,9 @@ def complete_weighing_transaction(user, transaction_id, weight, is_manual_entry=
     else:
         raise ValidationError("Both weights are already captured.")
         
+    if remarks:
+        trans.remarks = remarks
+
     if is_manual_entry:
         trans.is_manual_entry = True
         trans.manual_entry_reason = manual_entry_reason
