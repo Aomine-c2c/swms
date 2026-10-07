@@ -44,8 +44,8 @@ class ReportViewSet(viewsets.ViewSet):
         start_date, end_date = self._parse_dates(request)
         
         if report_type == 'tonnage':
-            data, group_field = ReportService.get_tonnage_report(period, group_by, start_date, end_date)
-            return Response({'data': data, 'group_field': group_field})
+            data, group_field, summary = ReportService.get_tonnage_report(period, group_by, start_date, end_date)
+            return Response({'data': data, 'group_field': group_field, 'summary': summary})
             
         elif report_type == 'status':
             data = ReportService.get_status_report(period, start_date, end_date)
@@ -57,6 +57,13 @@ class ReportViewSet(viewsets.ViewSet):
                 return Response({'error': 'Unauthorized'}, status=status.HTTP_403_FORBIDDEN)
             data = ReportService.get_activity_report(period, start_date, end_date)
             return Response({'data': data})
+
+        elif report_type == 'shift':
+            role_name = request.user.role.name if getattr(request.user, 'role', None) else ''
+            if not (request.user.is_superuser or role_name in ['Manager', 'Administrator', 'Supervisor']):
+                return Response({'error': 'Unauthorized'}, status=status.HTTP_403_FORBIDDEN)
+            shift_data = ReportService.get_shift_reconciliation(period, start_date, end_date)
+            return Response(shift_data)
             
         return Response({'error': 'Invalid report type'}, status=status.HTTP_400_BAD_REQUEST)
 
@@ -74,7 +81,7 @@ class ReportViewSet(viewsets.ViewSet):
         writer = csv.writer(response)
         
         if report_type == 'tonnage':
-            data, group_field = ReportService.get_tonnage_report(period, group_by, start_date, end_date)
+            data, group_field, summary = ReportService.get_tonnage_report(period, group_by, start_date, end_date)
             writer.writerow([group_field.replace('__name', '').replace('__license_plate', '').capitalize(), 'Total Net Weight (kg)', 'Transaction Count'])
             for row in data:
                 writer.writerow([row[group_field], row['total_net_weight'] or 0, row['transaction_count']])
@@ -93,6 +100,22 @@ class ReportViewSet(viewsets.ViewSet):
             writer.writerow(['User', 'Action', 'Count'])
             for row in data:
                 writer.writerow([row['user__username'], row['action'], row['count']])
+
+        elif report_type == 'shift':
+            role_name = request.user.role.name if getattr(request.user, 'role', None) else ''
+            if not (request.user.is_superuser or role_name in ['Manager', 'Administrator', 'Supervisor']):
+                return Response({'error': 'Unauthorized'}, status=status.HTTP_403_FORBIDDEN)
+            shift_data = ReportService.get_shift_reconciliation(period, start_date, end_date)
+            writer.writerow(['Operator', 'Total Tickets', 'Completed', 'Pending Verification', 'Manual Overrides', 'Net Weight (kg)'])
+            for op in shift_data['operators']:
+                writer.writerow([
+                    op['operator__username'],
+                    op['total_tickets'],
+                    op['completed_tickets'],
+                    op['pending_verification'],
+                    op['manual_overrides'],
+                    op['total_net_weight'] or 0
+                ])
                 
         else:
             return Response({'error': 'Invalid report type'}, status=status.HTTP_400_BAD_REQUEST)
@@ -107,17 +130,22 @@ class DashboardViewSet(viewsets.ViewSet):
         user = request.user
 
         from django.db.models import Count, Q
-        # Single query: get all status counts for this operator
-        counts = WeighingTransaction.objects.filter(operator=user).aggregate(
+        
+        # If user is admin, supervisor, or manager, show terminal-wide counts; else scope to operator
+        role_name = getattr(user.role, 'name', '') if hasattr(user, 'role') and user.role else ''
+        is_management = user.is_superuser or role_name in ['Administrator', 'Manager', 'Supervisor']
+
+        tx_qs = WeighingTransaction.objects.all() if is_management else WeighingTransaction.objects.filter(operator=user)
+
+        counts = tx_qs.aggregate(
             open_count=Count('id', filter=Q(status='Open')),
             pending_count=Count('id', filter=Q(status='Pending Verification')),
         )
 
-        # Recent completed tickets with related data (avoids N+1 in serializer)
         recent_tickets = (
-            WeighingTransaction.objects
-            .filter(operator=user, status='Completed')
-            .select_related('vehicle', 'material', 'driver', 'supplier', 'operator')
+            tx_qs
+            .filter(status='Completed')
+            .select_related('vehicle', 'material', 'driver', 'supplier', 'operator', 'ticket')
             .order_by('-first_weighing_datetime')[:5]
         )
 
@@ -142,7 +170,7 @@ class DashboardViewSet(viewsets.ViewSet):
         recent_exceptions = (
             WeighingTransaction.objects
             .filter(status__in=['Pending Verification', 'Corrected', 'Reversed'])
-            .select_related('vehicle', 'material', 'driver', 'supplier', 'operator')
+            .select_related('vehicle', 'material', 'driver', 'supplier', 'operator', 'ticket')
             .order_by('-updated_at')[:5]
         )
 
@@ -172,14 +200,15 @@ class DashboardViewSet(viewsets.ViewSet):
             total_weight=Sum('net_weight')
         ).order_by('-total_weight')
 
-        # Last 7 days trend
+        # Last 7 days trend with count & tonnage
         last_7_days = today - timedelta(days=7)
         trends = WeighingTransaction.objects.filter(
             first_weighing_datetime__date__gte=last_7_days,
             first_weighing_datetime__date__lte=today,
             status__in=['Completed', 'Corrected']
         ).values('first_weighing_datetime__date').annotate(
-            count=Count('id')
+            count=Count('id'),
+            tonnage=Sum('net_weight')
         ).order_by('first_weighing_datetime__date')
 
         return Response({

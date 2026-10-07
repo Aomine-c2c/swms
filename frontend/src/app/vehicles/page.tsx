@@ -18,7 +18,8 @@ import {
   Clock,
   ShieldCheck,
   FileText,
-  Weight
+  Weight,
+  Trash2
 } from 'lucide-react';
 import { api } from '@/lib/api';
 import { Vehicle, Carrier, Driver, WeighingTransaction } from '@/types';
@@ -149,6 +150,19 @@ export default function VehiclesPage() {
       setSubmitting(false);
     }
   };
+
+  const handleDelete = async (v: Vehicle, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+    if (!window.confirm(`Delete vehicle ${v.license_plate}? It will be marked as Inactive and removed from active dispatch.`)) return;
+    try {
+      await api.delete(`/vehicles/${v.id}/`);
+      if (selectedVehicle?.id === v.id) setSelectedVehicle(null);
+      fetchData();
+    } catch (err: any) {
+      alert(err.response?.data?.detail || 'Failed to delete vehicle.');
+    }
+  };
+
 
   // Helper: check if registration is expiring soon (within 30 days) or expired
   const getExpiryStatus = (expiryDate?: string | null) => {
@@ -369,12 +383,21 @@ export default function VehiclesPage() {
                           </td>
 
                           <td className="px-4 py-3 text-right">
-                            <button
-                              onClick={(e) => handleOpenEdit(v, e)}
-                              className="px-2.5 py-1 rounded-md border border-zinc-200 hover:bg-zinc-200 text-[11px] font-semibold text-zinc-700 transition-colors"
-                            >
-                              Edit
-                            </button>
+                            <div className="flex items-center justify-end gap-1.5">
+                              <button
+                                onClick={(e) => handleOpenEdit(v, e)}
+                                className="px-2.5 py-1 rounded-md border border-zinc-200 hover:bg-zinc-200 text-[11px] font-semibold text-zinc-700 transition-colors"
+                              >
+                                Edit
+                              </button>
+                              <button
+                                onClick={(e) => handleDelete(v, e)}
+                                className="p-1 rounded hover:bg-rose-50 text-zinc-300 hover:text-rose-600 transition-colors"
+                                title="Delete Vehicle"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
                           </td>
                         </tr>
                       );

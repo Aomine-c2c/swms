@@ -13,6 +13,7 @@ ROLE_PERMISSIONS = {
         'register_vehicles', 
         'register_drivers', 
         'capture_weights', 
+        'create_transactions', 
         'view_transactions', 
         'generate_tickets',
         'approve_corrections', 
@@ -38,6 +39,8 @@ ROLE_PERMISSIONS = {
         'generate_tickets'
     ],
     'Supervisor': [
+        'capture_weights',
+        'create_transactions',
         'view_transactions', 
         'approve_corrections', 
         'approve_reversals', 
@@ -54,7 +57,15 @@ ROLE_PERMISSIONS = {
 }
 
 def get_user_permissions(user):
-    if not user or not user.is_authenticated or not user.role:
+    if not user or not user.is_authenticated:
+        return []
+    if getattr(user, 'is_superuser', False):
+        # Superuser has all defined permissions
+        all_perms = set()
+        for perms in ROLE_PERMISSIONS.values():
+            all_perms.update(perms)
+        return list(all_perms)
+    if not getattr(user, 'role', None):
         return []
     return ROLE_PERMISSIONS.get(user.role.name, [])
 
@@ -65,7 +76,11 @@ def HasPermission(required_permission):
     """
     class _HasPermission(permissions.BasePermission):
         def has_permission(self, request, view):
-            if not request.user or not request.user.is_authenticated or not request.user.role:
+            if not request.user or not request.user.is_authenticated:
+                return False
+            if getattr(request.user, 'is_superuser', False):
+                return True
+            if not getattr(request.user, 'role', None):
                 return False
             
             user_perms = ROLE_PERMISSIONS.get(request.user.role.name, [])

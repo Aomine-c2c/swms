@@ -19,7 +19,8 @@ import {
   Scale,
   Clock,
   ArrowRight,
-  FileText
+  FileText,
+  Trash2
 } from 'lucide-react';
 import { api } from '@/lib/api';
 import { Driver, Carrier, WeighingTransaction } from '@/types';
@@ -147,6 +148,20 @@ export default function DriversPage() {
       fetchData();
     } catch (err: any) {
       alert(JSON.stringify(err.response?.data || 'Failed to toggle status.'));
+    }
+  };
+
+  const handleDelete = async (d: Driver, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+    if (!window.confirm(`Delete driver ${d.name}? This will mark them as Inactive.`)) return;
+    try {
+      await api.delete(`/drivers/${d.id}/`);
+      if (selectedDriver?.id === d.id) {
+        setSelectedDriver(null);
+      }
+      fetchData();
+    } catch (err: any) {
+      alert(JSON.stringify(err.response?.data || 'Failed to delete driver.'));
     }
   };
 
@@ -328,12 +343,21 @@ export default function DriversPage() {
                           </td>
 
                           <td className="px-4 py-3 text-right">
-                            <button
-                              onClick={(e) => handleOpenEdit(d, e)}
-                              className="px-2.5 py-1 rounded-md border border-zinc-200 hover:bg-zinc-200 text-[11px] font-semibold text-zinc-700 transition-colors"
-                            >
-                              Edit
-                            </button>
+                            <div className="flex items-center justify-end gap-1.5">
+                              <button
+                                onClick={(e) => handleOpenEdit(d, e)}
+                                className="px-2.5 py-1 rounded-md border border-zinc-200 hover:bg-zinc-200 text-[11px] font-semibold text-zinc-700 transition-colors"
+                              >
+                                Edit
+                              </button>
+                              <button
+                                onClick={(e) => handleDelete(d, e)}
+                                className="p-1 rounded-md border border-rose-200 text-rose-600 hover:bg-rose-50 transition-colors"
+                                title="Delete driver"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
                           </td>
                         </tr>
                       );
@@ -372,12 +396,21 @@ export default function DriversPage() {
                     </div>
                   </div>
 
-                  <button
-                    onClick={(e) => handleOpenEdit(selectedDriver, e)}
-                    className="px-2.5 py-1 rounded-lg border border-zinc-200 hover:bg-zinc-100 text-xs font-semibold text-zinc-700 transition-colors"
-                  >
-                    Edit Profile
-                  </button>
+                  <div className="flex items-center gap-1.5">
+                    <button
+                      onClick={(e) => handleOpenEdit(selectedDriver, e)}
+                      className="px-2.5 py-1 rounded-lg border border-zinc-200 hover:bg-zinc-100 text-xs font-semibold text-zinc-700 transition-colors"
+                    >
+                      Edit Profile
+                    </button>
+                    <button
+                      onClick={(e) => handleDelete(selectedDriver, e)}
+                      className="p-1.5 rounded-lg border border-rose-200 text-rose-600 hover:bg-rose-50 transition-colors"
+                      title="Delete profile"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </div>
                 </div>
 
                 {/* ID Details Card Grid */}

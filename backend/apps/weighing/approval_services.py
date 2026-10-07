@@ -2,7 +2,10 @@ from django.db import transaction
 from django.core.exceptions import ValidationError
 from django.utils import timezone
 from apps.weighing.models import WeighingTransaction, ApprovalRequest
-from apps.weighing.services import correct_weighing_transaction, reverse_weighing_transaction, cancel_weighing_transaction
+from apps.weighing.services import (
+    correct_weighing_transaction, reverse_weighing_transaction,
+    cancel_weighing_transaction, approve_weighing_transaction
+)
 from apps.audit.services import log_audit_action
 
 @transaction.atomic
@@ -19,6 +22,12 @@ def request_approval(user, transaction_id, action, request_reason, changes_paylo
     if action == 'CANCELLATION':
         if trans.status not in ['Open', 'Pending Verification']:
             raise ValidationError("Only Open or Pending transactions can be cancelled.")
+    elif action in ['TARE_TOLERANCE_EXCEPTION', 'OVERWEIGHT_EXCEPTION']:
+        if trans.status not in ['Open', 'Pending Verification']:
+            raise ValidationError("Exception approvals can only be requested for Open or Pending transactions.")
+        if trans.status != 'Pending Verification':
+            trans.status = 'Pending Verification'
+            trans.save(update_fields=['status'])
     else:
         if trans.status not in ['Completed', 'Corrected']:
             raise ValidationError(f"Only Completed/Corrected transactions can be {action.lower()}ed.")
@@ -53,6 +62,11 @@ def approve_request(user, request_id, review_reason=""):
         reverse_weighing_transaction(user, trans_id, approval_request.request_reason)
     elif approval_request.action == 'CANCELLATION':
         cancel_weighing_transaction(user, trans_id, approval_request.request_reason)
+    elif approval_request.action in ['TARE_TOLERANCE_EXCEPTION', 'OVERWEIGHT_EXCEPTION']:
+        # If both weights are already present on the transaction, complete directly.
+        # Otherwise if the second weight is in changes_payload, apply it.
+        second_weight = (approval_request.changes_payload or {}).get('weight')
+        approve_weighing_transaction(user, trans_id, weight=second_weight)
         
     approval_request.status = 'APPROVED'
     approval_request.reviewed_by = user
@@ -64,7 +78,7 @@ def approve_request(user, request_id, review_reason=""):
 
 @transaction.atomic
 def reject_request(user, request_id, review_reason):
-    approval_request = ApprovalRequest.objects.get(id=request_id)
+    approval_request = ApprovalRequest.objects.select_related('transaction').get(id=request_id)
     
     if approval_request.status != 'PENDING':
         raise ValidationError("Only PENDING requests can be rejected.")
@@ -74,6 +88,10 @@ def reject_request(user, request_id, review_reason):
         
     if not review_reason:
         raise ValidationError("A reason is required when rejecting a request.")
+
+    # When rejecting an exception on a pending transaction, transition transaction to Cancelled
+    if approval_request.action in ['TARE_TOLERANCE_EXCEPTION', 'OVERWEIGHT_EXCEPTION']:
+        cancel_weighing_transaction(user, approval_request.transaction.id, reason=f"Supervisor rejected exception: {review_reason}")
         
     approval_request.status = 'REJECTED'
     approval_request.reviewed_by = user

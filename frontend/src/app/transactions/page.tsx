@@ -12,6 +12,7 @@ import {
   Truck,
   ArrowRight,
   ShieldAlert,
+  AlertTriangle,
   X
 } from 'lucide-react';
 import { api } from '@/lib/api';
@@ -37,6 +38,7 @@ export default function TransactionsPage() {
   const [formMaterial, setFormMaterial] = useState('');
   const [formWeighingType, setFormWeighingType] = useState<'gross' | 'tare'>('gross');
   const [formIsManual, setFormIsManual] = useState(false);
+  const [formManualWeight, setFormManualWeight] = useState('');
   const [formManualReason, setFormManualReason] = useState('');
   const [formRemarks, setFormRemarks] = useState('');
   const [submitting, setSubmitting] = useState(false);
@@ -45,6 +47,8 @@ export default function TransactionsPage() {
   // 2nd Weighing modal
   const [activeCompletingTx, setActiveCompletingTx] = useState<WeighingTransaction | null>(null);
   const [secondWeightInput, setSecondWeightInput] = useState<string>('');
+  const [secondIsManual, setSecondIsManual] = useState(false);
+  const [secondManualReason, setSecondManualReason] = useState('');
   
   // Auto-opened Printable Ticket Slip Modal
   const [printedTx, setPrintedTx] = useState<any | null>(null);
@@ -62,6 +66,17 @@ export default function TransactionsPage() {
   // Moisture & Impurity Lab Deductions (for 2nd weighing completion)
   const [moisturePct, setMoisturePct] = useState<string>('0');
   const [impurityPct, setImpurityPct] = useState<string>('0');
+
+  // Automated Threshold Breach Warning Modal
+  const [thresholdModal, setThresholdModal] = useState<{
+    stage: 'first' | 'second';
+    payload: any;
+    violations: any[];
+    txId?: number;
+    extraPrintedData?: any;
+  } | null>(null);
+  const [thresholdOperatorNote, setThresholdOperatorNote] = useState('');
+  const [thresholdSubmitting, setThresholdSubmitting] = useState(false);
 
   // Search in table
   const [search, setSearch] = useState('');
@@ -112,8 +127,13 @@ export default function TransactionsPage() {
 
   const handleCreate1stWeighing = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (liveWeight <= 0 && !formIsManual) {
-      setErrorMsg('Scale weight is zero. Capture a valid scale reading or check Manual Entry.');
+    const effectiveWeight = formIsManual ? parseFloat(formManualWeight) : liveWeight;
+    if (!effectiveWeight || effectiveWeight <= 0) {
+      setErrorMsg(formIsManual ? 'Please enter a valid manual weight greater than 0 kg.' : 'Scale weight is zero. Capture a valid scale reading or check Manual Entry.');
+      return;
+    }
+    if (formIsManual && !formManualReason.trim()) {
+      setErrorMsg('A valid justification reason is required for manual entry override.');
       return;
     }
     if ((!frontBeamClear || !rearBeamClear) && !formIsManual) {
@@ -127,6 +147,8 @@ export default function TransactionsPage() {
       const payload: any = {
         vehicle: parseInt(formVehicle),
         material: parseInt(formMaterial),
+        weight_type: formWeighingType,
+        weight: effectiveWeight,
         is_manual_entry: formIsManual,
         first_weighing_datetime: new Date().toISOString(),
         remarks: formRemarks || undefined,
@@ -136,27 +158,39 @@ export default function TransactionsPage() {
       if (formSupplier) payload.supplier = parseInt(formSupplier);
 
       if (formWeighingType === 'gross') {
-        payload.gross_weight = liveWeight;
+        payload.gross_weight = effectiveWeight;
       } else {
-        payload.tare_weight = liveWeight;
+        payload.tare_weight = effectiveWeight;
       }
 
       if (formIsManual) {
         payload.manual_entry_reason = formManualReason;
       }
 
-      await api.post('/transactions/', payload);
-      setFormVehicle('');
-      setFormDriver('');
-      setFormSupplier('');
-      setFormMaterial('');
-      setFormRemarks('');
-      setFormIsManual(false);
-      setFormManualReason('');
-      zeroScale();
-      fetchData();
-    } catch (err: any) {
-      setErrorMsg(err.response?.data ? JSON.stringify(err.response.data) : 'Failed to record weighing.');
+      try {
+        await api.post('/transactions/', payload);
+        setFormVehicle('');
+        setFormDriver('');
+        setFormSupplier('');
+        setFormMaterial('');
+        setFormRemarks('');
+        setFormIsManual(false);
+        setFormManualWeight('');
+        setFormManualReason('');
+        zeroScale();
+        fetchData();
+      } catch (err: any) {
+        if (err.response?.status === 409 && err.response?.data?.requires_approval) {
+          setThresholdModal({
+            stage: 'first',
+            payload,
+            violations: err.response.data.violations || [],
+          });
+          setThresholdOperatorNote('');
+          return;
+        }
+        setErrorMsg(err.response?.data ? JSON.stringify(err.response.data) : 'Failed to record weighing.');
+      }
     } finally {
       setSubmitting(false);
     }
@@ -165,6 +199,10 @@ export default function TransactionsPage() {
   const handleComplete2ndWeighing = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!activeCompletingTx) return;
+    if (secondIsManual && !secondManualReason.trim()) {
+      setErrorMsg('A valid justification reason is required for manual entry override.');
+      return;
+    }
     setSubmitting(true);
     setErrorMsg(null);
 
@@ -192,27 +230,88 @@ export default function TransactionsPage() {
       const payload: any = {
         weight: weightVal,
         remarks: combinedRemarks || undefined,
+        is_manual_entry: secondIsManual,
+        manual_entry_reason: secondIsManual ? secondManualReason : undefined,
       };
 
-      const res = await api.post(`/transactions/${activeCompletingTx.id}/complete/`, payload);
-      
-      // Auto-open printable ticket slip dialog with calculated deduction overlay
-      setPrintedTx({
-        ...res.data,
-        moisture_pct: mPct,
-        impurity_pct: iPct,
-        deduction_kg: deductionKg,
-        payable_net_kg: payableNetKg,
-      });
-      setActiveCompletingTx(null);
-      setSecondWeightInput('');
-      setMoisturePct('0');
-      setImpurityPct('0');
-      fetchData();
-    } catch (err: any) {
-      setErrorMsg(err.response?.data ? JSON.stringify(err.response.data) : 'Failed to complete 2nd weighing.');
+      try {
+        const res = await api.post(`/transactions/${activeCompletingTx.id}/complete/`, payload);
+        
+        // Auto-open printable ticket slip dialog with calculated deduction overlay
+        setPrintedTx({
+          ...res.data,
+          moisture_pct: mPct,
+          impurity_pct: iPct,
+          deduction_kg: deductionKg,
+          payable_net_kg: payableNetKg,
+        });
+        setActiveCompletingTx(null);
+        setSecondWeightInput('');
+        setSecondIsManual(false);
+        setSecondManualReason('');
+        setMoisturePct('0');
+        setImpurityPct('0');
+        fetchData();
+      } catch (err: any) {
+        if (err.response?.status === 409 && err.response?.data?.requires_approval) {
+          setThresholdModal({
+            stage: 'second',
+            payload,
+            violations: err.response.data.violations || [],
+            txId: activeCompletingTx.id,
+            extraPrintedData: {
+              moisture_pct: mPct,
+              impurity_pct: iPct,
+              deduction_kg: deductionKg,
+              payable_net_kg: payableNetKg,
+            }
+          });
+          setThresholdOperatorNote('');
+          return;
+        }
+        setErrorMsg(err.response?.data ? JSON.stringify(err.response.data) : 'Failed to complete 2nd weighing.');
+      }
     } finally {
       setSubmitting(false);
+    }
+  };
+
+  const handleConfirmThresholdException = async () => {
+    if (!thresholdModal) return;
+    setThresholdSubmitting(true);
+    try {
+      if (thresholdModal.stage === 'first') {
+        await api.post('/transactions/', {
+          ...thresholdModal.payload,
+          confirm_exception: true,
+          exception_reason: thresholdOperatorNote || 'Operator confirmed threshold violation review request',
+        });
+        setFormVehicle('');
+        setFormDriver('');
+        setFormSupplier('');
+        setFormMaterial('');
+        setFormRemarks('');
+        setFormIsManual(false);
+        setFormManualReason('');
+        zeroScale();
+      } else {
+        await api.post(`/transactions/${thresholdModal.txId}/complete/`, {
+          ...thresholdModal.payload,
+          confirm_exception: true,
+          exception_reason: thresholdOperatorNote || 'Operator confirmed threshold violation review request',
+        });
+        setActiveCompletingTx(null);
+        setSecondWeightInput('');
+        setMoisturePct('0');
+        setImpurityPct('0');
+      }
+      setThresholdModal(null);
+      setThresholdOperatorNote('');
+      fetchData();
+    } catch (err: any) {
+      alert(err.response?.data?.error || 'Failed to submit exception to supervisor.');
+    } finally {
+      setThresholdSubmitting(false);
     }
   };
 
@@ -455,24 +554,45 @@ export default function TransactionsPage() {
                   <input
                     type="checkbox"
                     checked={formIsManual}
-                    onChange={(e) => setFormIsManual(e.target.checked)}
+                    onChange={(e) => {
+                      setFormIsManual(e.target.checked);
+                      if (e.target.checked && !formManualWeight && liveWeight > 0) {
+                        setFormManualWeight(liveWeight.toString());
+                      }
+                    }}
                     className="rounded text-zinc-900 focus:ring-0"
                   />
                   <span>Manual Entry Override</span>
                 </label>
                 {formIsManual && (
-                  <div>
-                    <label className="block text-[10px] uppercase font-bold text-zinc-600 mb-1">
-                      Override Justification *
-                    </label>
-                    <input
-                      type="text"
-                      required
-                      placeholder="e.g. Scale indicator cable severed"
-                      value={formManualReason}
-                      onChange={(e) => setFormManualReason(e.target.value)}
-                      className="w-full bg-white border border-zinc-300 rounded p-1.5 text-zinc-900"
-                    />
+                  <div className="space-y-2 pt-1 border-t border-zinc-200">
+                    <div>
+                      <label className="block text-[10px] uppercase font-bold text-zinc-600 mb-1">
+                        Manual Weight (kg) *
+                      </label>
+                      <input
+                        type="number"
+                        step="0.01"
+                        required
+                        placeholder="e.g. 15420"
+                        value={formManualWeight}
+                        onChange={(e) => setFormManualWeight(e.target.value)}
+                        className="w-full bg-white border border-zinc-300 rounded p-1.5 font-mono font-bold text-zinc-900 text-sm"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[10px] uppercase font-bold text-zinc-600 mb-1">
+                        Override Justification *
+                      </label>
+                      <input
+                        type="text"
+                        required
+                        placeholder="e.g. Scale indicator cable severed"
+                        value={formManualReason}
+                        onChange={(e) => setFormManualReason(e.target.value)}
+                        className="w-full bg-white border border-zinc-300 rounded p-1.5 text-zinc-900"
+                      />
+                    </div>
                   </div>
                 )}
               </div>
@@ -776,6 +896,34 @@ export default function TransactionsPage() {
                 </div>
               )}
 
+              {/* Manual Override Flag for 2nd Weighing */}
+              <div className="p-3 bg-zinc-50 border border-zinc-200 rounded-lg space-y-2">
+                <label className="flex items-center gap-2 cursor-pointer text-zinc-800 font-medium">
+                  <input
+                    type="checkbox"
+                    checked={secondIsManual}
+                    onChange={(e) => setSecondIsManual(e.target.checked)}
+                    className="rounded text-zinc-900 focus:ring-0"
+                  />
+                  <span>Manual Entry Override</span>
+                </label>
+                {secondIsManual && (
+                  <div className="pt-1 border-t border-zinc-200">
+                    <label className="block text-[10px] uppercase font-bold text-zinc-600 mb-1">
+                      Override Justification *
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      placeholder="e.g. Indicator serial communication timeout"
+                      value={secondManualReason}
+                      onChange={(e) => setSecondManualReason(e.target.value)}
+                      className="w-full bg-white border border-zinc-300 rounded p-1.5 text-zinc-900"
+                    />
+                  </div>
+                )}
+              </div>
+
               <div className="flex justify-end gap-2 pt-3 border-t border-zinc-200">
                 <button
                   type="button"
@@ -951,6 +1099,92 @@ export default function TransactionsPage() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Threshold Breach Warning Modal */}
+      {thresholdModal && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl max-w-lg w-full p-6 shadow-2xl border border-rose-200 animate-in fade-in zoom-in-95 duration-150">
+            <div className="flex items-start gap-3.5 border-b border-rose-100 pb-4">
+              <div className="p-3 bg-rose-100 text-rose-700 rounded-xl">
+                <AlertTriangle className="w-6 h-6" />
+              </div>
+              <div className="flex-1">
+                <h3 className="font-bold text-base text-zinc-900">Operational Limit Exceeded</h3>
+                <p className="text-xs text-rose-600 font-medium mt-0.5">
+                  Weighbridge safety threshold breach detected. Direct completion is locked.
+                </p>
+              </div>
+              <button
+                onClick={() => setThresholdModal(null)}
+                className="text-zinc-400 hover:text-zinc-600 p-1"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="my-4 space-y-3">
+              {thresholdModal.violations.map((v, i) => (
+                <div key={i} className="p-3 rounded-xl bg-rose-50/70 border border-rose-200 text-xs space-y-1.5 font-sans">
+                  <div className="flex items-center justify-between font-bold text-rose-900">
+                    <span className="flex items-center gap-1.5">
+                      <ShieldAlert className="w-4 h-4 text-rose-600" />
+                      {v.rule}
+                    </span>
+                    <span className="font-mono bg-rose-200/80 px-2 py-0.5 rounded text-[10px]">
+                      +{v.delta} kg ({v.delta_pct}%)
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-zinc-700 font-mono leading-relaxed">
+                    {v.message}
+                  </p>
+                  <div className="grid grid-cols-2 gap-2 pt-1 border-t border-rose-200/60 font-mono text-[11px]">
+                    <div>
+                      <span className="text-zinc-500 block text-[10px]">Captured Weight</span>
+                      <span className="font-bold text-zinc-900">{v.actual} kg</span>
+                    </div>
+                    <div>
+                      <span className="text-zinc-500 block text-[10px]">Allowed Limit</span>
+                      <span className="font-bold text-zinc-900">{v.limit} kg</span>
+                    </div>
+                  </div>
+                </div>
+              ))}
+
+              <div className="p-3 rounded-xl bg-zinc-50 border border-zinc-200 text-xs">
+                <label className="block text-[11px] font-bold text-zinc-700 uppercase tracking-wider mb-1">
+                  Operator Discrepancy Note (Forwarded to Supervisor)
+                </label>
+                <textarea
+                  rows={2}
+                  value={thresholdOperatorNote}
+                  onChange={(e) => setThresholdOperatorNote(e.target.value)}
+                  placeholder="e.g. Verified customer overweight permit / heavy wet payload..."
+                  className="w-full bg-white border border-zinc-200 rounded-lg p-2 text-zinc-900 focus:outline-none focus:border-zinc-800 text-xs"
+                />
+              </div>
+            </div>
+
+            <div className="flex items-center justify-between gap-3 pt-3 border-t border-zinc-200 text-xs">
+              <button
+                type="button"
+                onClick={() => setThresholdModal(null)}
+                className="px-4 py-2 rounded-lg border border-zinc-200 bg-white hover:bg-zinc-100 text-zinc-700 font-semibold"
+              >
+                Re-weigh / Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmThresholdException}
+                disabled={thresholdSubmitting}
+                className="px-4 py-2 rounded-lg bg-zinc-900 hover:bg-black text-white font-semibold flex items-center gap-1.5 shadow-sm disabled:opacity-50"
+              >
+                <ShieldAlert className="w-4 h-4 text-amber-400" />
+                <span>{thresholdSubmitting ? 'Routing...' : 'Route to Supervisor Queue'}</span>
+              </button>
+            </div>
           </div>
         </div>
       )}

@@ -106,21 +106,23 @@ def flag_weighing_transaction(user, transaction_id, reason):
     return trans
 
 @transaction.atomic
-def approve_weighing_transaction(user, transaction_id, weight):
+def approve_weighing_transaction(user, transaction_id, weight=None):
     # This is basically 'complete' but starting from Pending Verification
     trans = WeighingTransaction.objects.get(id=transaction_id)
     if trans.status != 'Pending Verification':
         raise ValidationError("Only Pending Verification transactions can be approved.")
         
-    if trans.gross_weight is None:
-        trans.gross_weight = weight
-    elif trans.tare_weight is None:
-        trans.tare_weight = weight
-    else:
-        # If it was flagged for another reason, the weights might already be captured, but our current workflow captures the second weight on completion.
-        raise ValidationError("Both weights are already captured.")
+    if weight is not None:
+        if trans.gross_weight is None:
+            trans.gross_weight = weight
+        elif trans.tare_weight is None:
+            trans.tare_weight = weight
         
-    trans.second_weighing_datetime = timezone.now()
+    if trans.gross_weight is None or trans.tare_weight is None:
+        raise ValidationError("Cannot complete weighing: both gross and tare weights are required.")
+        
+    if not trans.second_weighing_datetime:
+        trans.second_weighing_datetime = timezone.now()
     trans.status = 'Completed'
     
     trans.clean()

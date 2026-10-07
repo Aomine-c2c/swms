@@ -73,6 +73,8 @@ class ApprovalRequest(TimeStampedModel):
         ('CORRECTION', 'CORRECTION'),
         ('REVERSAL', 'REVERSAL'),
         ('CANCELLATION', 'CANCELLATION'),
+        ('TARE_TOLERANCE_EXCEPTION', 'TARE_TOLERANCE_EXCEPTION'),
+        ('OVERWEIGHT_EXCEPTION', 'OVERWEIGHT_EXCEPTION'),
     )
     STATUS_CHOICES = (
         ('PENDING', 'PENDING'),
@@ -81,7 +83,7 @@ class ApprovalRequest(TimeStampedModel):
     )
     
     transaction = models.ForeignKey(WeighingTransaction, on_delete=models.CASCADE, related_name='approval_requests')
-    action = models.CharField(max_length=20, choices=ACTION_CHOICES)
+    action = models.CharField(max_length=30, choices=ACTION_CHOICES)
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='PENDING', db_index=True)
     
     requested_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name='requested_approvals')

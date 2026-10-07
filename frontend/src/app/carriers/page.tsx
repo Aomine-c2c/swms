@@ -15,7 +15,8 @@ import {
   User,
   ShieldCheck,
   Scale,
-  ArrowRight
+  ArrowRight,
+  Trash2
 } from 'lucide-react';
 import { api } from '@/lib/api';
 import { Carrier, Vehicle } from '@/types';
@@ -137,6 +138,20 @@ export default function CarriersPage() {
       fetchData();
     } catch (err: any) {
       alert(JSON.stringify(err.response?.data || 'Failed to toggle carrier status.'));
+    }
+  };
+
+  const handleDelete = async (c: Carrier, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+    if (!window.confirm(`Delete carrier "${c.name}"? This will mark it as Inactive.`)) return;
+    try {
+      await api.delete(`/carriers/${c.id}/`);
+      if (selectedCarrier?.id === c.id) {
+        setSelectedCarrier(null);
+      }
+      fetchData();
+    } catch (err: any) {
+      alert(JSON.stringify(err.response?.data || 'Failed to delete carrier.'));
     }
   };
 
@@ -323,12 +338,21 @@ export default function CarriersPage() {
                           </td>
 
                           <td className="px-4 py-3 text-right">
-                            <button
-                              onClick={(e) => handleOpenEdit(c, e)}
-                              className="px-2.5 py-1 rounded-md border border-zinc-200 hover:bg-zinc-200 text-[11px] font-semibold text-zinc-700 transition-colors"
-                            >
-                              Edit
-                            </button>
+                            <div className="flex items-center justify-end gap-1.5">
+                              <button
+                                onClick={(e) => handleOpenEdit(c, e)}
+                                className="px-2.5 py-1 rounded-md border border-zinc-200 hover:bg-zinc-200 text-[11px] font-semibold text-zinc-700 transition-colors"
+                              >
+                                Edit
+                              </button>
+                              <button
+                                onClick={(e) => handleDelete(c, e)}
+                                className="p-1 rounded-md border border-rose-200 text-rose-600 hover:bg-rose-50 transition-colors"
+                                title="Delete carrier"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
                           </td>
                         </tr>
                       );
@@ -369,12 +393,21 @@ export default function CarriersPage() {
                     </div>
                   </div>
 
-                  <button
-                    onClick={(e) => handleOpenEdit(selectedCarrier, e)}
-                    className="px-2.5 py-1 rounded-lg border border-zinc-200 hover:bg-zinc-100 text-xs font-semibold text-zinc-700 transition-colors"
-                  >
-                    Edit Fleet
-                  </button>
+                  <div className="flex items-center gap-1.5">
+                    <button
+                      onClick={(e) => handleOpenEdit(selectedCarrier, e)}
+                      className="px-2.5 py-1 rounded-lg border border-zinc-200 hover:bg-zinc-100 text-xs font-semibold text-zinc-700 transition-colors"
+                    >
+                      Edit Fleet
+                    </button>
+                    <button
+                      onClick={(e) => handleDelete(selectedCarrier, e)}
+                      className="p-1.5 rounded-lg border border-rose-200 text-rose-600 hover:bg-rose-50 transition-colors"
+                      title="Delete carrier"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </div>
                 </div>
 
                 {/* Dispatch & Operations Grid */}

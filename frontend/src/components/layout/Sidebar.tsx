@@ -7,21 +7,24 @@ import {
   Scale, 
   LayoutDashboard, 
   ArrowLeftRight, 
-  Truck,
-  Users,
-  Building2,
-  Package,
-  Layers,
+  Truck, 
+  Users, 
+  Building2, 
+  Package, 
+  Layers, 
   CheckCircle2, 
   FileText, 
   BarChart3, 
-  ShieldCheck,
-  History,
-  Settings,
-  Cpu,
-  ChevronDown,
-  ChevronRight,
-  LogOut 
+  History, 
+  Settings, 
+  Database,
+  Sliders,
+  Cpu, 
+  ChevronDown, 
+  ChevronRight, 
+  LogOut,
+  PanelLeftClose,
+  PanelLeftOpen
 } from 'lucide-react';
 import { useAuth } from '@/lib/auth-context';
 
@@ -31,6 +34,12 @@ export const Sidebar: React.FC = () => {
 
   // Collapsible categories state
   const [collapsedSections, setCollapsedSections] = useState<Record<string, boolean>>({});
+  // Hover & pin state
+  const [isHovered, setIsHovered] = useState(false);
+  const [isPinned, setIsPinned] = useState(false);
+
+  // Expanded if pinned OR hovered
+  const isExpanded = isPinned || isHovered;
 
   const toggleSection = (section: string) => {
     setCollapsedSections((prev) => ({ ...prev, [section]: !prev[section] }));
@@ -38,7 +47,26 @@ export const Sidebar: React.FC = () => {
 
   const navCategories = [
     {
+      title: 'INTELLIGENCE & OVERVIEW',
+      shortTitle: 'OVERVIEW',
+      items: [
+        {
+          label: 'Dashboard',
+          href: '/',
+          icon: LayoutDashboard,
+          allowed: hasPermission('view_dashboards') || isRole('Administrator') || isRole('Manager') || isRole('Supervisor') || isRole('Operator') || isRole('Weighbridge Operator'),
+        },
+        {
+          label: 'Reports & Analytics',
+          href: '/reports',
+          icon: BarChart3,
+          allowed: hasPermission('generate_reports') || isRole('Supervisor') || isRole('Manager') || isRole('Administrator'),
+        },
+      ],
+    },
+    {
       title: 'OPERATIONS',
+      shortTitle: 'OPERATIONS',
       items: [
         {
           label: 'Weighbridge Console',
@@ -56,6 +84,7 @@ export const Sidebar: React.FC = () => {
     },
     {
       title: 'MASTER REGISTRIES',
+      shortTitle: 'REGISTRIES',
       items: [
         {
           label: 'Vehicles',
@@ -91,6 +120,7 @@ export const Sidebar: React.FC = () => {
     },
     {
       title: 'COMPLIANCE & AUDIT',
+      shortTitle: 'COMPLIANCE',
       items: [
         {
           label: 'Approvals Queue',
@@ -107,30 +137,26 @@ export const Sidebar: React.FC = () => {
       ],
     },
     {
-      title: 'INTELLIGENCE',
-      items: [
-        {
-          label: 'Dashboard',
-          href: '/',
-          icon: LayoutDashboard,
-          allowed: hasPermission('view_dashboards') || isRole('Administrator') || isRole('Manager') || isRole('Supervisor'),
-        },
-        {
-          label: 'Reports & Analytics',
-          href: '/reports',
-          icon: BarChart3,
-          allowed: hasPermission('generate_reports') || isRole('Supervisor') || isRole('Manager') || isRole('Administrator'),
-        },
-      ],
-    },
-    {
       title: 'ADMINISTRATION',
+      shortTitle: 'ADMIN',
       items: [
         {
-          label: 'System & Users',
+          label: 'User Accounts',
           href: '/admin',
-          icon: Settings,
-          allowed: hasPermission('manage_users') || hasPermission('manage_system') || isRole('Administrator'),
+          icon: Users,
+          allowed: hasPermission('manage_users') || isRole('Administrator'),
+        },
+        {
+          label: 'Database & Backups',
+          href: '/backups',
+          icon: Database,
+          allowed: hasPermission('manage_system') || isRole('Administrator'),
+        },
+        {
+          label: 'System Settings',
+          href: '/settings',
+          icon: Sliders,
+          allowed: hasPermission('manage_system_settings') || hasPermission('manage_system') || isRole('Administrator') || isRole('Supervisor'),
         },
         {
           label: 'Hardware & Scales',
@@ -143,22 +169,42 @@ export const Sidebar: React.FC = () => {
   ];
 
   return (
-    <aside className="w-64 bg-white border-r border-zinc-200 flex flex-col justify-between select-none">
+    <aside 
+      onMouseEnter={() => setIsHovered(true)}
+      onMouseLeave={() => setIsHovered(false)}
+      className={`relative z-40 bg-white border-r border-zinc-200 flex flex-col justify-between select-none transition-all duration-300 ease-in-out shadow-xs ${
+        isExpanded ? 'w-64' : 'w-16'
+      }`}
+    >
       <div className="flex flex-col flex-1 min-h-0">
         
         {/* Brand Header */}
-        <div className="h-14 flex items-center px-5 border-b border-zinc-200 gap-2.5 shrink-0">
-          <div className="w-7 h-7 rounded-lg bg-black text-white flex items-center justify-center font-bold text-xs">
-            <Scale className="w-3.5 h-3.5" />
-          </div>
-          <div>
-            <h1 className="font-bold text-zinc-900 text-xs tracking-tight">SMART-WEIGH</h1>
-            <p className="text-[9px] uppercase font-semibold text-zinc-400 tracking-wider">Enterprise Terminal</p>
-          </div>
+        <div className="h-14 flex items-center justify-between px-3.5 border-b border-zinc-200 shrink-0">
+          <Link href="/" className="flex items-center gap-2.5 overflow-hidden">
+            <div className="w-8 h-8 rounded-lg bg-black text-white flex items-center justify-center font-bold text-xs shrink-0 shadow-xs">
+              <Scale className="w-4 h-4" />
+            </div>
+            {isExpanded && (
+              <div className="overflow-hidden transition-opacity duration-200">
+                <h1 className="font-black text-zinc-900 text-xs tracking-tight truncate leading-none">SMART-WEIGH</h1>
+                <p className="text-[8px] uppercase font-bold text-zinc-400 tracking-wider truncate mt-0.5">Enterprise Terminal</p>
+              </div>
+            )}
+          </Link>
+
+          {isExpanded && (
+            <button
+              onClick={() => setIsPinned(!isPinned)}
+              className="p-1 rounded text-zinc-400 hover:text-zinc-800 hover:bg-zinc-100 transition-colors"
+              title={isPinned ? 'Unpin sidebar (auto-collapse)' : 'Pin sidebar expanded'}
+            >
+              {isPinned ? <PanelLeftClose className="w-3.5 h-3.5" /> : <PanelLeftOpen className="w-3.5 h-3.5" />}
+            </button>
+          )}
         </div>
 
         {/* Scrollable Nav Sections */}
-        <nav className="flex-1 overflow-y-auto p-3 space-y-4">
+        <nav className="flex-1 overflow-y-auto p-2 space-y-3">
           {navCategories.map((cat) => {
             const visibleItems = cat.items.filter((item) => item.allowed);
             if (visibleItems.length === 0) return null;
@@ -166,19 +212,25 @@ export const Sidebar: React.FC = () => {
             const isCollapsed = !!collapsedSections[cat.title];
 
             return (
-              <div key={cat.title} className="space-y-1">
+              <div key={cat.title} className="space-y-0.5">
                 {/* Category Header */}
-                <button
-                  type="button"
-                  onClick={() => toggleSection(cat.title)}
-                  className="w-full flex items-center justify-between px-2 py-1 text-[10px] font-bold text-zinc-400 tracking-wider uppercase hover:text-zinc-600 transition-colors"
-                >
-                  <span>{cat.title}</span>
-                  {isCollapsed ? <ChevronRight className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
-                </button>
+                {isExpanded ? (
+                  <button
+                    type="button"
+                    onClick={() => toggleSection(cat.title)}
+                    className="w-full flex items-center justify-between px-2 py-1 text-[9px] font-mono font-bold text-zinc-400 tracking-wider uppercase hover:text-zinc-600 transition-colors"
+                  >
+                    <span className="truncate">{cat.title}</span>
+                    {isCollapsed ? <ChevronRight className="w-3 h-3 shrink-0" /> : <ChevronDown className="w-3 h-3 shrink-0" />}
+                  </button>
+                ) : (
+                  <div className="w-full flex justify-center py-1">
+                    <span className="w-4 h-0.5 rounded-full bg-zinc-200" />
+                  </div>
+                )}
 
                 {/* Category Items */}
-                {!isCollapsed && (
+                {(!isCollapsed || !isExpanded) && (
                   <div className="space-y-0.5">
                     {visibleItems.map((item) => {
                       const Icon = item.icon;
@@ -187,14 +239,15 @@ export const Sidebar: React.FC = () => {
                         <Link
                           key={item.href}
                           href={item.href}
+                          title={!isExpanded ? item.label : undefined}
                           className={`flex items-center gap-2.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold transition-all ${
                             isActive
                               ? 'bg-zinc-900 text-white shadow-xs'
                               : 'text-zinc-600 hover:text-zinc-900 hover:bg-zinc-100'
-                          }`}
+                          } ${!isExpanded ? 'justify-center px-0' : ''}`}
                         >
-                          <Icon className={`w-3.5 h-3.5 ${isActive ? 'text-white' : 'text-zinc-400'}`} />
-                          <span className="truncate">{item.label}</span>
+                          <Icon className={`w-4 h-4 shrink-0 ${isActive ? 'text-white' : 'text-zinc-400'}`} />
+                          {isExpanded && <span className="truncate text-xs">{item.label}</span>}
                         </Link>
                       );
                     })}
@@ -207,26 +260,46 @@ export const Sidebar: React.FC = () => {
       </div>
 
       {/* Operator User Card & Logout */}
-      <div className="p-3 border-t border-zinc-200 bg-zinc-50 shrink-0">
-        <div className="flex items-center gap-2.5 mb-2 px-2 py-1.5 rounded-lg bg-white border border-zinc-200">
-          <div className="w-6 h-6 rounded bg-zinc-900 text-white flex items-center justify-center font-bold text-[10px]">
-            {user?.username?.slice(0, 2).toUpperCase() || 'OP'}
-          </div>
-          <div className="flex-1 min-w-0">
-            <p className="text-xs font-bold text-zinc-900 truncate">{user?.username || 'Operator'}</p>
-            <p className="text-[9px] text-zinc-500 truncate capitalize">
-              {user?.role_details?.name || (user?.is_superuser ? 'Administrator' : 'User')}
-            </p>
-          </div>
-        </div>
+      <div className="p-2 border-t border-zinc-200 bg-zinc-50 shrink-0">
+        {isExpanded ? (
+          <>
+            <div className="flex items-center gap-2 mb-2 px-2 py-1.5 rounded-lg bg-white border border-zinc-200">
+              <div className="w-6 h-6 rounded bg-zinc-900 text-white flex items-center justify-center font-bold text-[10px] shrink-0">
+                {user?.username?.slice(0, 2).toUpperCase() || 'OP'}
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-xs font-bold text-zinc-900 truncate leading-none">{user?.username || 'Operator'}</p>
+                <p className="text-[9px] text-zinc-500 truncate capitalize mt-0.5">
+                  {user?.role_details?.name || (user?.is_superuser ? 'Administrator' : 'User')}
+                </p>
+              </div>
+            </div>
 
-        <button
-          onClick={logout}
-          className="w-full flex items-center justify-center gap-2 px-2.5 py-1.5 rounded-lg text-xs font-semibold text-zinc-700 hover:text-zinc-900 hover:bg-zinc-200/80 border border-zinc-200 transition-colors"
-        >
-          <LogOut className="w-3.5 h-3.5" />
-          <span>Sign Out</span>
-        </button>
+            <button
+              onClick={logout}
+              className="w-full flex items-center justify-center gap-1.5 px-2 py-1.5 rounded-lg text-xs font-semibold text-zinc-700 hover:text-zinc-900 hover:bg-zinc-200/80 border border-zinc-200 transition-colors"
+            >
+              <LogOut className="w-3.5 h-3.5" />
+              <span>Sign Out</span>
+            </button>
+          </>
+        ) : (
+          <div className="flex flex-col items-center gap-2 py-1">
+            <div 
+              className="w-7 h-7 rounded-lg bg-zinc-900 text-white flex items-center justify-center font-bold text-[10px]"
+              title={user?.username || 'Operator'}
+            >
+              {user?.username?.slice(0, 2).toUpperCase() || 'OP'}
+            </div>
+            <button
+              onClick={logout}
+              className="p-1.5 rounded-lg text-zinc-500 hover:text-zinc-900 hover:bg-zinc-200 transition-colors"
+              title="Sign Out"
+            >
+              <LogOut className="w-3.5 h-3.5" />
+            </button>
+          </div>
+        )}
       </div>
     </aside>
   );

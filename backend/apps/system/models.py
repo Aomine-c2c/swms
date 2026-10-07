@@ -1,4 +1,4 @@
-﻿from django.db import models
+from django.db import models
 from django.conf import settings
 
 
@@ -81,3 +81,47 @@ class BackupLog(models.Model):
         self.verification_status = 'FAILED'
         self.verification_message = message
         self.save(update_fields=['status', 'verification_status', 'verification_message'])
+
+
+class SystemSetting(models.Model):
+    """
+    Singleton system-wide operational configuration.
+    Stores automated weighbridge tolerance and overload enforcement parameters.
+    """
+    tare_tolerance_pct = models.DecimalField(
+        max_digits=5, decimal_places=2, default=5.00,
+        help_text="Global allowable tare deviation percentage (e.g. 5.00%)"
+    )
+    tare_tolerance_kg = models.DecimalField(
+        max_digits=8, decimal_places=2, default=200.00,
+        help_text="Global allowable tare deviation absolute weight in kg (e.g. 200 kg)"
+    )
+    tare_tolerance_mode = models.CharField(
+        max_length=20,
+        choices=(
+            ('PERCENTAGE', 'Percentage Only'),
+            ('ABSOLUTE', 'Absolute (kg) Only'),
+            ('EITHER', 'Either (Whichever Exceeded)'),
+        ),
+        default='EITHER'
+    )
+    overweight_enforcement_enabled = models.BooleanField(
+        default=True,
+        help_text="Require supervisor verification if gross weight exceeds vehicle max capacity"
+    )
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def save(self, *args, **kwargs):
+        self.pk = 1
+        super().save(*args, **kwargs)
+
+    def delete(self, *args, **kwargs):
+        pass
+
+    @classmethod
+    def get_settings(cls):
+        obj, _ = cls.objects.get_or_create(pk=1)
+        return obj
+
+    def __str__(self):
+        return f"SystemSetting(tare_pct={self.tare_tolerance_pct}%, tare_kg={self.tare_tolerance_kg}kg)"

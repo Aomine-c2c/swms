@@ -40,7 +40,7 @@ export default function ApprovalsPage() {
   const fetchApprovals = async () => {
     try {
       setLoading(true);
-      const res = await api.get('/approvals/');
+      const res = await api.get('/approvals/?page_size=100');
       const list: ApprovalRequest[] = res.data.results || res.data || [];
       setApprovals(list);
       if (list.length > 0 && !selectedReq) {
@@ -214,8 +214,16 @@ export default function ApprovalsPage() {
                           </td>
 
                           <td className="px-4 py-3">
-                            <span className="inline-flex px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-zinc-100 text-zinc-800 border border-zinc-200">
-                              {req.action}
+                            <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-mono font-bold border ${
+                              req.action === 'OVERWEIGHT_EXCEPTION'
+                                ? 'bg-rose-50 text-rose-800 border-rose-200'
+                                : req.action === 'TARE_TOLERANCE_EXCEPTION'
+                                ? 'bg-amber-50 text-amber-900 border-amber-200'
+                                : 'bg-zinc-100 text-zinc-800 border-zinc-200'
+                            }`}>
+                              {req.action === 'OVERWEIGHT_EXCEPTION' && <AlertTriangle className="w-3 h-3 text-rose-600" />}
+                              {req.action === 'TARE_TOLERANCE_EXCEPTION' && <Scale className="w-3 h-3 text-amber-600" />}
+                              {req.action.replace('_EXCEPTION', '')}
                             </span>
                           </td>
 
@@ -359,9 +367,43 @@ export default function ApprovalsPage() {
                     {/* Proposed State / Action Impact */}
                     <div className="p-3 bg-zinc-100 rounded-xl border border-zinc-300 space-y-2 font-mono">
                       <span className="text-[10px] font-sans font-bold uppercase tracking-wider text-zinc-900 block border-b border-zinc-300 pb-1">
-                        Action Impact: {selectedReq.action}
+                        Action Impact: {selectedReq.action.replace('_EXCEPTION', '')}
                       </span>
-                      {selectedReq.changes_payload ? (
+                      {['OVERWEIGHT_EXCEPTION', 'TARE_TOLERANCE_EXCEPTION'].includes(selectedReq.action) && selectedReq.changes_payload ? (
+                        <div className="space-y-1.5 font-sans">
+                          <div className={`p-2.5 rounded-lg border text-xs ${
+                            selectedReq.action === 'OVERWEIGHT_EXCEPTION'
+                              ? 'bg-rose-50 border-rose-200 text-rose-900'
+                              : 'bg-amber-50 border-amber-200 text-amber-900'
+                          }`}>
+                            <div className="flex items-center gap-1.5 font-bold">
+                              {selectedReq.action === 'OVERWEIGHT_EXCEPTION' ? (
+                                <AlertTriangle className="w-4 h-4 text-rose-600" />
+                              ) : (
+                                <Scale className="w-4 h-4 text-amber-600" />
+                              )}
+                              <span>{selectedReq.changes_payload.rule || selectedReq.action}</span>
+                            </div>
+                            <p className="text-[11px] mt-1 text-zinc-700 leading-relaxed font-mono">
+                              {selectedReq.changes_payload.message}
+                            </p>
+                          </div>
+                          <div className="font-mono text-[11px] space-y-1 pt-1">
+                            <div className="flex justify-between">
+                              <span className="text-zinc-500">Recorded:</span>
+                              <span className="font-bold text-zinc-900">{selectedReq.changes_payload.actual} kg</span>
+                            </div>
+                            <div className="flex justify-between">
+                              <span className="text-zinc-500">Allowed Limit:</span>
+                              <span className="font-bold text-zinc-900">{selectedReq.changes_payload.limit} kg</span>
+                            </div>
+                            <div className="flex justify-between border-t border-zinc-200 pt-1">
+                              <span className="text-zinc-500">Exceeded Delta:</span>
+                              <span className="font-bold text-rose-600">+{selectedReq.changes_payload.delta} kg ({selectedReq.changes_payload.delta_pct}%)</span>
+                            </div>
+                          </div>
+                        </div>
+                      ) : selectedReq.changes_payload ? (
                         Object.entries(selectedReq.changes_payload).map(([k, v]) => (
                           <div key={k} className="flex justify-between text-[11px]">
                             <span className="text-zinc-600">{k}:</span>

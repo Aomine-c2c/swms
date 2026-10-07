@@ -11,7 +11,8 @@ import {
   Scale,
   DollarSign,
   Layers,
-  Sparkles
+  Sparkles,
+  Trash2
 } from 'lucide-react';
 import { api } from '@/lib/api';
 import { Material } from '@/types';
@@ -100,6 +101,16 @@ export default function MaterialsPage() {
       fetchData();
     } catch (err: any) {
       alert(JSON.stringify(err.response?.data || 'Failed to toggle material status.'));
+    }
+  };
+
+  const handleDelete = async (m: Material) => {
+    if (!window.confirm(`Delete commodity "${m.name}"? This will mark it as Inactive.`)) return;
+    try {
+      await api.delete(`/materials/${m.id}/`);
+      fetchData();
+    } catch (err: any) {
+      alert(JSON.stringify(err.response?.data || 'Failed to delete commodity.'));
     }
   };
 
@@ -280,12 +291,21 @@ export default function MaterialsPage() {
                     </td>
 
                     <td className="px-4 py-3 text-right">
-                      <button
-                        onClick={() => handleOpenEdit(m)}
-                        className="px-2.5 py-1 rounded-md border border-zinc-200 hover:bg-zinc-100 text-[11px] font-semibold text-zinc-700 transition-colors"
-                      >
-                        Edit
-                      </button>
+                      <div className="flex items-center justify-end gap-1.5">
+                        <button
+                          onClick={() => handleOpenEdit(m)}
+                          className="px-2.5 py-1 rounded-md border border-zinc-200 hover:bg-zinc-100 text-[11px] font-semibold text-zinc-700 transition-colors"
+                        >
+                          Edit
+                        </button>
+                        <button
+                          onClick={() => handleDelete(m)}
+                          className="p-1 rounded-md border border-rose-200 text-rose-600 hover:bg-rose-50 transition-colors"
+                          title="Delete commodity"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))

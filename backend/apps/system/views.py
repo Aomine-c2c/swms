@@ -1,4 +1,4 @@
-﻿"""
+"""
 System API views — backup status and management.
 IMPORTANT: No file paths or database credentials are exposed in any response.
 """
@@ -106,3 +106,26 @@ class BackupViewSet(viewsets.ReadOnlyModelViewSet):
             )
 
         return Response(BackupLogSerializer(log).data, status=status.HTTP_201_CREATED)
+
+
+class SystemSettingViewSet(viewsets.ViewSet):
+    """
+    Get or update global operational thresholds and system settings.
+    Accessible to authenticated users; updates require manage_system or supervisor role.
+    """
+    permission_classes = [IsAuthenticated]
+
+    def list(self, request):
+        from apps.system.models import SystemSetting
+        from apps.system.serializers import SystemSettingSerializer
+        setting = SystemSetting.get_settings()
+        return Response(SystemSettingSerializer(setting).data)
+
+    def create(self, request):
+        from apps.system.models import SystemSetting
+        from apps.system.serializers import SystemSettingSerializer
+        setting = SystemSetting.get_settings()
+        serializer = SystemSettingSerializer(setting, data=request.data, partial=True)
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+        return Response(serializer.data)

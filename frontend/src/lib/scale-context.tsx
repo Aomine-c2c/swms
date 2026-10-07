@@ -38,7 +38,12 @@ interface ScaleContextType {
   updateConfig: (newCfg: Partial<ScaleConfig>) => void;
   liveWeight: number;
   isStable: boolean;
+  isInMotion: boolean;
   isConnected: boolean;
+  connectionStatus: 'CONNECTED' | 'RECONNECTING' | 'ERROR';
+  lastHeartbeat: Date | null;
+  connectionError: string | null;
+  reconnect: () => Promise<void>;
   zeroScale: () => void;
   simulateWeight: (weight: number) => void;
   testConnection: () => Promise<{ success: boolean; message: string; sampleRaw?: string }>;
@@ -49,7 +54,12 @@ const ScaleContext = createContext<ScaleContextType>({
   updateConfig: () => {},
   liveWeight: 0,
   isStable: true,
+  isInMotion: false,
   isConnected: true,
+  connectionStatus: 'CONNECTED',
+  lastHeartbeat: null,
+  connectionError: null,
+  reconnect: async () => {},
   zeroScale: () => {},
   simulateWeight: () => {},
   testConnection: async () => ({ success: true, message: 'Simulated connection active' }),
@@ -59,7 +69,11 @@ export const ScaleProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   const [config, setConfig] = useState<ScaleConfig>(DEFAULT_CONFIG);
   const [liveWeight, setLiveWeight] = useState<number>(0);
   const [isStable, setIsStable] = useState<boolean>(true);
+  const [isInMotion, setIsInMotion] = useState<boolean>(false);
   const [isConnected, setIsConnected] = useState<boolean>(true);
+  const [connectionStatus, setConnectionStatus] = useState<'CONNECTED' | 'RECONNECTING' | 'ERROR'>('CONNECTED');
+  const [lastHeartbeat, setLastHeartbeat] = useState<Date | null>(new Date());
+  const [connectionError, setConnectionError] = useState<string | null>(null);
 
   useEffect(() => {
     if (typeof window !== 'undefined') {
@@ -72,6 +86,21 @@ export const ScaleProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     }
   }, []);
 
+  // Heartbeat & Auto-reconnect loop
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setLastHeartbeat(new Date());
+      // In simulated mode, connection is persistent
+      if (config.connectionType === 'simulated') {
+        setIsConnected(true);
+        setConnectionStatus('CONNECTED');
+        setConnectionError(null);
+      }
+    }, 5000);
+
+    return () => clearInterval(interval);
+  }, [config.connectionType]);
+
   const updateConfig = (newCfg: Partial<ScaleConfig>) => {
     setConfig((prev) => {
       const updated = { ...prev, ...newCfg };
@@ -82,19 +111,42 @@ export const ScaleProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     });
   };
 
+  const reconnect = async () => {
+    setConnectionStatus('RECONNECTING');
+    setConnectionError(null);
+    try {
+      await new Promise((r) => setTimeout(r, 800));
+      setIsConnected(true);
+      setConnectionStatus('CONNECTED');
+      setLastHeartbeat(new Date());
+    } catch {
+      setIsConnected(false);
+      setConnectionStatus('ERROR');
+      setConnectionError('Failed to establish COM link to indicator.');
+    }
+  };
+
   const zeroScale = () => {
     setLiveWeight(0);
     setIsStable(true);
+    setIsInMotion(false);
   };
 
   const simulateWeight = (weight: number) => {
     setLiveWeight(weight);
     setIsStable(false);
-    setTimeout(() => setIsStable(true), 600);
+    setIsInMotion(true);
+    setTimeout(() => {
+      setIsStable(true);
+      setIsInMotion(false);
+    }, 700);
   };
 
   const testConnection = async (): Promise<{ success: boolean; message: string; sampleRaw?: string }> => {
     if (config.connectionType === 'simulated') {
+      setIsConnected(true);
+      setConnectionStatus('CONNECTED');
+      setConnectionError(null);
       return {
         success: true,
         message: 'Scale Simulation Loopback OK (Virtual indicator ready)',
@@ -105,15 +157,21 @@ export const ScaleProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     if (config.connectionType === 'network') {
       // Simulate/perform TCP handshake validation
       await new Promise((r) => setTimeout(r, 600));
+      setIsConnected(true);
+      setConnectionStatus('CONNECTED');
+      setConnectionError(null);
       return {
         success: true,
         message: `Connected to Scale Terminal at ${config.networkHost}:${config.networkPort}`,
-        sampleRaw: 'ST,GS,+0000000kg\r\n',
+        sampleRaw: ' ST,GS,+0000000kg\r\n',
       };
     }
 
     // Serial COM Port test
     await new Promise((r) => setTimeout(r, 600));
+    setIsConnected(true);
+    setConnectionStatus('CONNECTED');
+    setConnectionError(null);
     return {
       success: true,
       message: `Serial Port ${config.serialPort} opened at ${config.baudRate} 8N1`,
@@ -128,7 +186,12 @@ export const ScaleProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         updateConfig,
         liveWeight,
         isStable,
+        isInMotion,
         isConnected,
+        connectionStatus,
+        lastHeartbeat,
+        connectionError,
+        reconnect,
         zeroScale,
         simulateWeight,
         testConnection,

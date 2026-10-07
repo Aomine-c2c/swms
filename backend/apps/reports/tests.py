@@ -67,10 +67,12 @@ class ReportServiceTests(TestCase):
 
     def test_get_tonnage_report_by_material(self):
         # We expect Coal=9000 (2 tx), Iron Ore=6000 (1 tx)
-        data, group_field = ReportService.get_tonnage_report(period='daily', group_by='material')
+        data, group_field, summary = ReportService.get_tonnage_report(period='daily', group_by='material')
         
         self.assertEqual(group_field, 'material__name')
         self.assertEqual(len(data), 2)
+        self.assertEqual(summary['total_transactions'], 3)
+        self.assertEqual(summary['total_net_weight'], 15000)
         
         # Sort or find
         coal_data = next((item for item in data if item['material__name'] == 'Coal'), None)

@@ -247,3 +247,110 @@ class ApprovalSystemTest(TestCase):
         req.refresh_from_db()
         self.assertEqual(req.status, 'APPROVED')
 
+
+class ToleranceAndOverweightTests(TestCase):
+    def setUp(self):
+        from apps.system.models import SystemSetting
+        from decimal import Decimal
+        self.operator_role = Role.objects.create(name='Operator')
+        self.supervisor_role = Role.objects.create(name='Supervisor')
+
+        self.operator = User.objects.create_user(username='op_tol', password='op', role=self.operator_role)
+        self.supervisor = User.objects.create_user(username='sup_tol', password='sup', role=self.supervisor_role)
+
+        self.vehicle = Vehicle.objects.create(
+            license_plate='TOL-888',
+            known_tare_weight=Decimal('8000.00'),
+            max_capacity=Decimal('30000.00')
+        )
+        self.material = Material.objects.create(name='Scrap Metal')
+
+        self.settings = SystemSetting.get_settings()
+        self.settings.tare_tolerance_pct = Decimal('5.00')
+        self.settings.tare_tolerance_kg = Decimal('200.00')
+        self.settings.tare_tolerance_mode = 'EITHER'
+        self.settings.overweight_enforcement_enabled = True
+        self.settings.save()
+
+    def test_tare_tolerance_within_bounds(self):
+        from apps.weighing.tolerance_services import check_weight_thresholds
+        violations = check_weight_thresholds(self.vehicle, tare_weight=8100)
+        self.assertEqual(len(violations), 0)
+
+    def test_tare_tolerance_exceeded_triggers_violation(self):
+        from apps.weighing.tolerance_services import check_weight_thresholds
+        violations = check_weight_thresholds(self.vehicle, tare_weight=8500)
+        self.assertEqual(len(violations), 1)
+        self.assertEqual(violations[0]['type'], 'TARE_TOLERANCE_EXCEPTION')
+        self.assertAlmostEqual(violations[0]['delta'], 500.0)
+
+    def test_overweight_exceeded_triggers_violation(self):
+        from apps.weighing.tolerance_services import check_weight_thresholds
+        violations = check_weight_thresholds(self.vehicle, gross_weight=32500)
+        self.assertEqual(len(violations), 1)
+        self.assertEqual(violations[0]['type'], 'OVERWEIGHT_EXCEPTION')
+        self.assertAlmostEqual(violations[0]['delta'], 2500.0)
+
+    def test_approval_flow_completes_transaction(self):
+        from apps.weighing.approval_services import request_approval, approve_request
+        from apps.weighing.tolerance_services import check_weight_thresholds
+        from decimal import Decimal
+
+        trans = create_weighing_transaction(
+            user=self.operator,
+            weight_type='gross',
+            weight=Decimal('32500.00'),
+            vehicle=self.vehicle,
+            material=self.material
+        )
+        violations = check_weight_thresholds(self.vehicle, gross_weight=32500)
+        self.assertEqual(len(violations), 1)
+
+        trans.status = 'Pending Verification'
+        trans.tare_weight = Decimal('8000.00')
+        trans.save()
+
+        req = request_approval(
+            user=self.operator,
+            transaction_id=trans.id,
+            action='OVERWEIGHT_EXCEPTION',
+            request_reason='Special authorization for high payload',
+            changes_payload=violations[0]
+        )
+        self.assertEqual(req.status, 'PENDING')
+
+        approved_req = approve_request(user=self.supervisor, request_id=req.id, review_reason='Verified axle permit')
+        self.assertEqual(approved_req.status, 'APPROVED')
+
+        trans.refresh_from_db()
+        self.assertEqual(trans.status, 'Completed')
+        self.assertTrue(hasattr(trans, 'ticket'))
+        self.assertIsNotNone(trans.ticket.ticket_number)
+
+    def test_rejection_flow_cancels_transaction(self):
+        from apps.weighing.approval_services import request_approval, reject_request
+        from decimal import Decimal
+
+        trans = create_weighing_transaction(
+            user=self.operator,
+            weight_type='gross',
+            weight=Decimal('32500.00'),
+            vehicle=self.vehicle,
+            material=self.material
+        )
+        trans.status = 'Pending Verification'
+        trans.save()
+
+        req = request_approval(
+            user=self.operator,
+            transaction_id=trans.id,
+            action='OVERWEIGHT_EXCEPTION',
+            request_reason='Overload',
+        )
+
+        rejected_req = reject_request(user=self.supervisor, request_id=req.id, review_reason='Overload unacceptable')
+        self.assertEqual(rejected_req.status, 'REJECTED')
+
+        trans.refresh_from_db()
+        self.assertEqual(trans.status, 'Cancelled')
+

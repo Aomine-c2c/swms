@@ -39,6 +39,8 @@ export interface Vehicle {
   default_driver?: number | Driver | null;
   default_driver_name?: string;
   max_capacity?: string | number | null;
+  tare_tolerance_pct?: string | number | null;
+  tare_tolerance_kg?: string | number | null;
   registration_expiry?: string | null;
   last_inspection_date?: string | null;
   status?: string;
@@ -81,12 +83,16 @@ export interface WeighingTransaction {
   ticket_number?: string;
   vehicle: number | Vehicle;
   vehicle_license?: string;
+  vehicle_details?: Vehicle;
   driver?: number | Driver | null;
   driver_name?: string;
+  driver_details?: Driver;
   supplier?: number | Supplier | null;
   supplier_name?: string;
+  supplier_details?: Supplier;
   material: number | Material;
   material_name?: string;
+  material_details?: Material;
   operator: number | User;
   operator_name?: string;
   gross_weight: string | number | null;
@@ -104,7 +110,7 @@ export interface ApprovalRequest {
   id: number;
   transaction: number | WeighingTransaction;
   transaction_details?: WeighingTransaction;
-  action: 'CORRECTION' | 'REVERSAL' | 'CANCELLATION';
+  action: 'CORRECTION' | 'REVERSAL' | 'CANCELLATION' | 'TARE_TOLERANCE_EXCEPTION' | 'OVERWEIGHT_EXCEPTION';
   requested_by: number | User;
   requested_by_name?: string;
   reviewed_by?: number | User | null;
@@ -137,4 +143,13 @@ export interface BackupRecord {
   created_at: string;
   status: string;
   verified?: boolean;
+}
+
+export interface SystemSetting {
+  id: number;
+  tare_tolerance_pct: string | number;
+  tare_tolerance_kg: string | number;
+  tare_tolerance_mode: 'PERCENTAGE' | 'ABSOLUTE' | 'EITHER';
+  overweight_enforcement_enabled: boolean;
+  updated_at?: string;
 }

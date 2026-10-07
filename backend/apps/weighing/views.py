@@ -11,7 +11,9 @@ from apps.weighing.services import (create_weighing_transaction, complete_weighi
                                     correct_weighing_transaction, reverse_weighing_transaction,
                                     cancel_weighing_transaction, flag_weighing_transaction, approve_weighing_transaction)
 from apps.weighing.approval_services import request_approval, approve_request, reject_request
+from apps.weighing.tolerance_services import check_weight_thresholds
 from apps.weighing.models import WeighingTransaction, ApprovalRequest
+from apps.vehicles.models import Vehicle
 from django.core.exceptions import ValidationError
 from django.db.models import Q
 import logging
@@ -25,7 +27,7 @@ class WeighingTransactionViewSet(mixins.CreateModelMixin, mixins.RetrieveModelMi
     
     def get_queryset(self):
         queryset = WeighingTransaction.objects.select_related(
-            'vehicle', 'material', 'driver', 'supplier', 'operator'
+            'vehicle', 'material', 'driver', 'supplier', 'operator', 'ticket'
         )
         user = self.request.user
         
@@ -75,11 +77,61 @@ class WeighingTransactionViewSet(mixins.CreateModelMixin, mixins.RetrieveModelMi
             return [IsAuthenticated(), HasPermission('create_transactions')()]
         return super().get_permissions()
     
+    @action(detail=False, methods=['post'], permission_classes=[IsAuthenticated])
+    def check_thresholds(self, request):
+        vehicle_id = request.data.get('vehicle')
+        gross = request.data.get('gross_weight')
+        tare = request.data.get('tare_weight')
+        
+        vehicle = None
+        if vehicle_id:
+            try:
+                vehicle = Vehicle.objects.get(id=vehicle_id)
+            except Vehicle.DoesNotExist:
+                pass
+                
+        violations = check_weight_thresholds(vehicle, gross_weight=gross, tare_weight=tare)
+        return Response({
+            'has_violations': len(violations) > 0,
+            'violations': violations
+        })
+
     def create(self, request, *args, **kwargs):
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
+        force_flag = request.data.get('confirm_exception', False)
+        
+        # Check thresholds
+        v_data = serializer.validated_data
+        vehicle = v_data.get('vehicle')
+        w_type = v_data.get('weight_type')
+        weight_val = v_data.get('weight')
+        gross = weight_val if w_type == 'gross' else None
+        tare = weight_val if w_type == 'tare' else None
+        
+        violations = check_weight_thresholds(vehicle, gross_weight=gross, tare_weight=tare)
+        if violations and not force_flag:
+            return Response({
+                'requires_approval': True,
+                'violations': violations,
+                'error': violations[0]['message']
+            }, status=status.HTTP_409_CONFLICT)
+            
         try:
             trans = create_weighing_transaction(user=request.user, **serializer.validated_data)
+            
+            # If confirmed as exception, flag to Pending Verification and create approval request
+            if violations and force_flag:
+                trans.status = 'Pending Verification'
+                trans.save(update_fields=['status'])
+                for v in violations:
+                    request_approval(
+                        user=request.user,
+                        transaction_id=trans.id,
+                        action=v['type'],
+                        request_reason=request.data.get('exception_reason') or v['message'],
+                        changes_payload=v
+                    )
             return Response(WeighingTransactionSerializer(trans).data, status=status.HTTP_201_CREATED)
         except ValidationError as e:
             return Response(e.message_dict if hasattr(e, 'message_dict') else {'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
@@ -89,6 +141,60 @@ class WeighingTransactionViewSet(mixins.CreateModelMixin, mixins.RetrieveModelMi
         self.check_permissions(request)
         serializer = CompleteWeighingTransactionSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
+        force_flag = request.data.get('confirm_exception', False)
+        
+        try:
+            trans = WeighingTransaction.objects.select_related('vehicle').get(id=pk)
+        except WeighingTransaction.DoesNotExist:
+            return Response({'error': 'Transaction not found.'}, status=status.HTTP_404_NOT_FOUND)
+            
+        weight_val = serializer.validated_data.get('weight')
+        gross = trans.gross_weight or weight_val
+        tare = trans.tare_weight or weight_val
+        
+        # Fundamental invariant check: Tare cannot exceed Gross
+        if trans.gross_weight is not None and weight_val > trans.gross_weight:
+            return Response({'error': 'Tare weight cannot be greater than gross weight.'}, status=status.HTTP_400_BAD_REQUEST)
+        if trans.tare_weight is not None and weight_val < trans.tare_weight:
+            return Response({'error': 'Gross weight cannot be less than tare weight.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        violations = check_weight_thresholds(trans.vehicle, gross_weight=gross, tare_weight=tare)
+        if violations and not force_flag:
+            return Response({
+                'requires_approval': True,
+                'violations': violations,
+                'error': violations[0]['message']
+            }, status=status.HTTP_409_CONFLICT)
+            
+        if violations and force_flag:
+            try:
+                # Save second weight on transaction and transition to Pending Verification
+                if trans.gross_weight is None:
+                    trans.gross_weight = weight_val
+                elif trans.tare_weight is None:
+                    trans.tare_weight = weight_val
+                if serializer.validated_data.get('remarks'):
+                    trans.remarks = serializer.validated_data['remarks']
+                if serializer.validated_data.get('is_manual_entry'):
+                    trans.is_manual_entry = True
+                    trans.manual_entry_reason = serializer.validated_data.get('manual_entry_reason')
+                trans.status = 'Pending Verification'
+                trans.clean()
+                trans.save()
+                
+                # Create ApprovalRequest for the supervisor
+                for v in violations:
+                    request_approval(
+                        user=request.user,
+                        transaction_id=trans.id,
+                        action=v['type'],
+                        request_reason=request.data.get('exception_reason') or v['message'],
+                        changes_payload={**v, 'weight': float(weight_val)}
+                    )
+                return Response(WeighingTransactionSerializer(trans).data)
+            except ValidationError as e:
+                return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
         try:
             trans = complete_weighing_transaction(user=request.user, transaction_id=pk, **serializer.validated_data)
             return Response(WeighingTransactionSerializer(trans).data)
@@ -180,10 +286,34 @@ class WeighingTransactionViewSet(mixins.CreateModelMixin, mixins.RetrieveModelMi
             return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
 
-class ApprovalRequestViewSet(mixins.RetrieveModelMixin, mixins.ListModelMixin, viewsets.GenericViewSet):
+class ApprovalRequestViewSet(mixins.CreateModelMixin, mixins.RetrieveModelMixin, mixins.ListModelMixin, viewsets.GenericViewSet):
     queryset = ApprovalRequest.objects.all().order_by('-created_at')
     serializer_class = ApprovalRequestSerializer
     permission_classes = [IsAuthenticated] # Fine-grained per action below
+
+    def create(self, request, *args, **kwargs):
+        trans_id = request.data.get('transaction')
+        action_val = request.data.get('action')
+        reason = request.data.get('request_reason') or request.data.get('reason')
+        changes_payload = request.data.get('changes_payload')
+
+        if not trans_id or not action_val or not reason:
+            return Response(
+                {'error': 'transaction, action, and request_reason are required.'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        try:
+            approval = request_approval(
+                user=request.user,
+                transaction_id=trans_id,
+                action=action_val,
+                request_reason=reason,
+                changes_payload=changes_payload
+            )
+            return Response(ApprovalRequestSerializer(approval).data, status=status.HTTP_201_CREATED)
+        except ValidationError as e:
+            return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
     def get_queryset(self):
         queryset = ApprovalRequest.objects.select_related(

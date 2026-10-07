@@ -27,6 +27,8 @@ class Vehicle(TimeStampedModel):
     carrier = models.ForeignKey(Carrier, on_delete=models.SET_NULL, null=True, blank=True, related_name='vehicles')
     default_driver = models.ForeignKey('drivers.Driver', on_delete=models.SET_NULL, null=True, blank=True, related_name='default_vehicles')
     max_capacity = models.DecimalField(max_length=10, max_digits=10, decimal_places=2, blank=True, null=True, help_text="Maximum gross weight capacity in kg")
+    tare_tolerance_pct = models.DecimalField(max_digits=5, decimal_places=2, blank=True, null=True, help_text="Per-vehicle override tare tolerance percentage")
+    tare_tolerance_kg = models.DecimalField(max_digits=8, decimal_places=2, blank=True, null=True, help_text="Per-vehicle override tare tolerance kg")
     registration_expiry = models.DateField(blank=True, null=True)
     last_inspection_date = models.DateField(blank=True, null=True)
 

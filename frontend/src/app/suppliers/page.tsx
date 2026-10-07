@@ -12,7 +12,8 @@ import {
   MapPin,
   User,
   ShieldCheck,
-  Package
+  Package,
+  Trash2
 } from 'lucide-react';
 import { api } from '@/lib/api';
 import { Supplier } from '@/types';
@@ -101,6 +102,16 @@ export default function SuppliersPage() {
       fetchData();
     } catch (err: any) {
       alert(JSON.stringify(err.response?.data || 'Failed to toggle supplier status.'));
+    }
+  };
+
+  const handleDelete = async (s: Supplier) => {
+    if (!window.confirm(`Delete supplier "${s.name}"? This will mark them as Inactive.`)) return;
+    try {
+      await api.delete(`/suppliers/${s.id}/`);
+      fetchData();
+    } catch (err: any) {
+      alert(JSON.stringify(err.response?.data || 'Failed to delete supplier.'));
     }
   };
 
@@ -283,12 +294,21 @@ export default function SuppliersPage() {
                     </td>
 
                     <td className="px-4 py-3 text-right">
-                      <button
-                        onClick={() => handleOpenEdit(s)}
-                        className="px-2.5 py-1 rounded-md border border-zinc-200 hover:bg-zinc-100 text-[11px] font-semibold text-zinc-700 transition-colors"
-                      >
-                        Edit
-                      </button>
+                      <div className="flex items-center justify-end gap-1.5">
+                        <button
+                          onClick={() => handleOpenEdit(s)}
+                          className="px-2.5 py-1 rounded-md border border-zinc-200 hover:bg-zinc-100 text-[11px] font-semibold text-zinc-700 transition-colors"
+                        >
+                          Edit
+                        </button>
+                        <button
+                          onClick={() => handleDelete(s)}
+                          className="p-1 rounded-md border border-rose-200 text-rose-600 hover:bg-rose-50 transition-colors"
+                          title="Delete supplier"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))

@@ -1,4 +1,4 @@
-﻿from rest_framework import serializers
+from rest_framework import serializers
 from apps.system.models import BackupLog
 
 
@@ -57,3 +57,18 @@ class BackupStatusSerializer(serializers.Serializer):
     total_backups = serializers.IntegerField()
     verified_backups = serializers.IntegerField()
     failed_backups = serializers.IntegerField()
+
+
+class SystemSettingSerializer(serializers.ModelSerializer):
+    class Meta:
+        from apps.system.models import SystemSetting
+        model = SystemSetting
+        fields = [
+            'id',
+            'tare_tolerance_pct',
+            'tare_tolerance_kg',
+            'tare_tolerance_mode',
+            'overweight_enforcement_enabled',
+            'updated_at'
+        ]
+        read_only_fields = ['id', 'updated_at']
