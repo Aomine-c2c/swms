@@ -19,6 +19,7 @@ import { api } from '@/lib/api';
 import { WeighingTransaction, Vehicle, Driver, Supplier, Material } from '@/types';
 import { useAuth } from '@/lib/auth-context';
 import { useScale } from '@/lib/scale-context';
+import { SearchableSelect } from '@/components/common/SearchableSelect';
 
 export default function TransactionsPage() {
   const { user } = useAuth();
@@ -43,6 +44,27 @@ export default function TransactionsPage() {
   const [formRemarks, setFormRemarks] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+
+  const selectedVehicleObj = vehicles.find((v) => v.id.toString() === formVehicle);
+
+  // Global Keyboard Shortcuts (F2: Zero Scale, F4: Toggle Manual Entry)
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Don't trigger if user is actively typing in a text input or textarea
+      const targetTag = (e.target as HTMLElement)?.tagName?.toLowerCase();
+      const isInput = targetTag === 'input' || targetTag === 'textarea';
+
+      if (e.key === 'F2') {
+        e.preventDefault();
+        zeroScale();
+      } else if (e.key === 'F4') {
+        e.preventDefault();
+        setFormIsManual((prev) => !prev);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [zeroScale]);
 
   // 2nd Weighing modal
   const [activeCompletingTx, setActiveCompletingTx] = useState<WeighingTransaction | null>(null);
@@ -478,74 +500,99 @@ export default function TransactionsPage() {
                 </button>
               </div>
 
+              {/* Real-time Tare Variance Alert when weighing type is Tare */}
+              {formWeighingType === 'tare' && selectedVehicleObj?.tare_weight && (
+                (() => {
+                  const currentW = formIsManual ? parseFloat(formManualWeight) || 0 : liveWeight;
+                  const registeredTare = Number(selectedVehicleObj.tare_weight);
+                  const diff = currentW - registeredTare;
+                  const diffPct = registeredTare > 0 ? (diff / registeredTare) * 100 : 0;
+                  const absPct = Math.abs(diffPct);
+                  const tolerancePct = Number(selectedVehicleObj.tare_tolerance_pct || 2.0);
+                  const isOutOfTol = currentW > 0 && absPct > tolerancePct;
+
+                  if (currentW <= 0) return null;
+
+                  return (
+                    <div className={`p-2.5 rounded-lg border text-xs flex items-start gap-2 ${
+                      isOutOfTol 
+                        ? 'bg-amber-50/80 border-amber-300 text-amber-900' 
+                        : 'bg-emerald-50/80 border-emerald-300 text-emerald-900'
+                    }`}>
+                      <AlertTriangle className={`w-4 h-4 shrink-0 mt-0.5 ${isOutOfTol ? 'text-amber-600' : 'text-emerald-600'}`} />
+                      <div className="flex-1">
+                        <div className="flex items-center justify-between font-bold">
+                          <span>{isOutOfTol ? 'Tare Variance Warning' : 'Tare Within Tolerance'}</span>
+                          <span className="font-mono text-[11px]">{diff >= 0 ? `+${diff.toFixed(0)}` : diff.toFixed(0)} kg ({diffPct.toFixed(1)}%)</span>
+                        </div>
+                        <p className="text-[10px] mt-0.5 opacity-85">
+                          Registered Tare: {registeredTare.toLocaleString()} kg • Allowed: ±{tolerancePct}% ({((registeredTare * tolerancePct) / 100).toFixed(0)} kg)
+                        </p>
+                      </div>
+                    </div>
+                  );
+                })()
+              )}
+
               <div>
-                <label className="block text-[11px] font-bold text-zinc-700 uppercase tracking-wider mb-1">
-                  Vehicle License Plate *
-                </label>
-                <select
+                <SearchableSelect
+                  label="Vehicle License Plate"
                   required
                   value={formVehicle}
-                  onChange={(e) => handleVehicleSelect(e.target.value)}
-                  className="w-full bg-zinc-50 border border-zinc-200 rounded-lg p-2 text-zinc-900 font-semibold focus:outline-none focus:bg-white focus:border-zinc-800"
-                >
-                  <option value="">Select vehicle...</option>
-                  {vehicles.map((v) => (
-                    <option key={v.id} value={v.id}>
-                      {v.license_plate} {v.tare_weight ? `(Tare: ${v.tare_weight}kg)` : ''}
-                    </option>
-                  ))}
-                </select>
+                  onChange={handleVehicleSelect}
+                  placeholder="Search vehicle license plate..."
+                  options={vehicles.map((v) => ({
+                    value: v.id.toString(),
+                    label: v.license_plate,
+                    sublabel: v.carrier_name ? `Carrier: ${v.carrier_name}` : undefined,
+                    badge: v.tare_weight ? `Tare: ${v.tare_weight}kg` : undefined,
+                  }))}
+                />
               </div>
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-[11px] font-bold text-zinc-700 uppercase tracking-wider mb-1">
-                    Material *
-                  </label>
-                  <select
+                  <SearchableSelect
+                    label="Material"
                     required
                     value={formMaterial}
-                    onChange={(e) => setFormMaterial(e.target.value)}
-                    className="w-full bg-zinc-50 border border-zinc-200 rounded-lg p-2 text-zinc-900 focus:outline-none focus:bg-white focus:border-zinc-800"
-                  >
-                    <option value="">Select material...</option>
-                    {materials.map((m) => (
-                      <option key={m.id} value={m.id}>{m.name}</option>
-                    ))}
-                  </select>
+                    onChange={(val) => setFormMaterial(val)}
+                    placeholder="Search material..."
+                    options={materials.map((m) => ({
+                      value: m.id.toString(),
+                      label: m.name,
+                      sublabel: m.unit_price ? `$${m.unit_price}/t` : undefined,
+                    }))}
+                  />
                 </div>
 
                 <div>
-                  <label className="block text-[11px] font-bold text-zinc-700 uppercase tracking-wider mb-1">
-                    Driver
-                  </label>
-                  <select
+                  <SearchableSelect
+                    label="Driver"
                     value={formDriver}
-                    onChange={(e) => setFormDriver(e.target.value)}
-                    className="w-full bg-zinc-50 border border-zinc-200 rounded-lg p-2 text-zinc-900 focus:outline-none focus:bg-white focus:border-zinc-800"
-                  >
-                    <option value="">Default driver...</option>
-                    {drivers.map((d) => (
-                      <option key={d.id} value={d.id}>{d.name}</option>
-                    ))}
-                  </select>
+                    onChange={(val) => setFormDriver(val)}
+                    placeholder="Search driver..."
+                    options={drivers.map((d) => ({
+                      value: d.id.toString(),
+                      label: d.name,
+                      sublabel: d.license_number || undefined,
+                    }))}
+                  />
                 </div>
               </div>
 
               <div>
-                <label className="block text-[11px] font-bold text-zinc-700 uppercase tracking-wider mb-1">
-                  Supplier / Vendor
-                </label>
-                <select
+                <SearchableSelect
+                  label="Supplier / Vendor"
                   value={formSupplier}
-                  onChange={(e) => setFormSupplier(e.target.value)}
-                  className="w-full bg-zinc-50 border border-zinc-200 rounded-lg p-2 text-zinc-900 focus:outline-none focus:bg-white focus:border-zinc-800"
-                >
-                  <option value="">Direct / Optional...</option>
-                  {suppliers.map((s) => (
-                    <option key={s.id} value={s.id}>{s.name}</option>
-                  ))}
-                </select>
+                  onChange={(val) => setFormSupplier(val)}
+                  placeholder="Search supplier or optional..."
+                  options={suppliers.map((s) => ({
+                    value: s.id.toString(),
+                    label: s.name,
+                    sublabel: s.phone_number || undefined,
+                  }))}
+                />
               </div>
 
               {/* Manual Override Flag */}

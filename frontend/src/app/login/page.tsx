@@ -122,14 +122,14 @@ export default function LoginPage() {
           <p className="text-[10px] uppercase font-bold text-zinc-400 tracking-wider text-center mb-2.5">
             Quick-Login Demo Accounts
           </p>
-          <div className="grid grid-cols-3 gap-2">
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
             <button
               type="button"
               disabled={loading}
               onClick={() => {
-                setUsername('operator1');
-                setPassword('password123');
-                loginWithCredentials('operator1', 'password123');
+                setUsername('operator');
+                setPassword('operator');
+                loginWithCredentials('operator', 'operator');
               }}
               className="py-1.5 px-2 rounded-lg border border-zinc-200 bg-zinc-50 hover:bg-zinc-100 text-zinc-800 text-[11px] font-semibold text-center transition-colors disabled:opacity-50"
             >
@@ -139,13 +139,25 @@ export default function LoginPage() {
               type="button"
               disabled={loading}
               onClick={() => {
-                setUsername('supervisor1');
-                setPassword('password123');
-                loginWithCredentials('supervisor1', 'password123');
+                setUsername('supervisor');
+                setPassword('supervisor');
+                loginWithCredentials('supervisor', 'supervisor');
               }}
               className="py-1.5 px-2 rounded-lg border border-zinc-200 bg-zinc-50 hover:bg-zinc-100 text-zinc-800 text-[11px] font-semibold text-center transition-colors disabled:opacity-50"
             >
               Supervisor
+            </button>
+            <button
+              type="button"
+              disabled={loading}
+              onClick={() => {
+                setUsername('manager');
+                setPassword('manager');
+                loginWithCredentials('manager', 'manager');
+              }}
+              className="py-1.5 px-2 rounded-lg border border-zinc-200 bg-zinc-50 hover:bg-zinc-100 text-zinc-800 text-[11px] font-semibold text-center transition-colors disabled:opacity-50"
+            >
+              Manager
             </button>
             <button
               type="button"

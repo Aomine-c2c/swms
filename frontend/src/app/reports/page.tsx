@@ -119,9 +119,19 @@ export default function ReportsPage() {
         avg: totalCount > 0 ? totalKg / totalCount : 0
       };
     }
+    if (reportType === 'shift') {
+      const totalKg = shiftSummary?.total_net_weight || reportData.reduce((acc, r) => acc + Number(r.total_net_weight || 0), 0);
+      const totalCount = shiftSummary?.total_trips || reportData.reduce((acc, r) => acc + Number(r.total_tickets || 0), 0);
+      return {
+        weight: totalKg,
+        tonnage: totalKg / 1000,
+        count: totalCount,
+        avg: totalCount > 0 ? totalKg / totalCount : 0
+      };
+    }
     const count = reportData.reduce((acc, r) => acc + Number(r.count || 0), 0);
     return { weight: 0, tonnage: 0, count, avg: 0 };
-  }, [reportData, reportType]);
+  }, [reportData, reportType, shiftSummary]);
 
   return (
     <RouteGuard roles={['Supervisor', 'Manager', 'Administrator']}>
@@ -259,10 +269,10 @@ export default function ReportsPage() {
             </div>
             <div className="mt-1">
               <div className="text-xl font-mono font-black text-zinc-900 tracking-tight">
-                {reportType === 'tonnage' ? `${totals.tonnage.toLocaleString(undefined, { maximumFractionDigits: 2 })} t` : `${totals.count} ops`}
+                {reportType === 'tonnage' || reportType === 'shift' ? `${totals.tonnage.toLocaleString(undefined, { maximumFractionDigits: 2 })} t` : `${totals.count} ops`}
               </div>
               <p className="text-[10px] text-zinc-500 font-mono mt-0.5">
-                {reportType === 'tonnage' ? `${totals.weight.toLocaleString()} kg total` : 'Across selected criteria'}
+                {reportType === 'tonnage' || reportType === 'shift' ? `${totals.weight.toLocaleString()} kg total` : 'Across selected criteria'}
               </p>
             </div>
           </div>
@@ -277,22 +287,32 @@ export default function ReportsPage() {
                 {totals.count}
               </div>
               <p className="text-[10px] text-emerald-600 font-bold flex items-center gap-0.5 mt-0.5">
-                <CheckCircle2 className="w-3 h-3" /> Certified slips
+                <CheckCircle2 className="w-3 h-3" /> {reportType === 'shift' ? `${shiftSummary?.completed_trips ?? totals.count} completed` : 'Certified slips'}
               </p>
             </div>
           </div>
 
           <div className="p-3.5 rounded-xl bg-white border border-zinc-200 shadow-2xs">
             <div className="flex items-center justify-between">
-              <span className="text-[10px] font-mono font-bold uppercase tracking-wider text-zinc-400">Avg Haul Mass</span>
+              <span className="text-[10px] font-mono font-bold uppercase tracking-wider text-zinc-400">
+                {reportType === 'shift' ? 'Manual Overrides' : 'Avg Haul Mass'}
+              </span>
               <TrendingUp className="w-4 h-4 text-amber-600" />
             </div>
             <div className="mt-1">
               <div className="text-xl font-mono font-black text-zinc-900 tracking-tight">
-                {reportType === 'tonnage' ? `${(totals.avg / 1000).toFixed(2)} t` : '-'}
+                {reportType === 'shift'
+                  ? `${shiftSummary?.manual_entries ?? 0} flags`
+                  : reportType === 'tonnage'
+                  ? `${(totals.avg / 1000).toFixed(2)} t`
+                  : '-'}
               </div>
               <p className="text-[10px] text-zinc-500 font-mono mt-0.5">
-                {reportType === 'tonnage' ? `${Math.round(totals.avg).toLocaleString()} kg / ticket` : 'Not applicable'}
+                {reportType === 'shift'
+                  ? 'Audit exceptions logged'
+                  : reportType === 'tonnage'
+                  ? `${Math.round(totals.avg).toLocaleString()} kg / ticket`
+                  : 'Not applicable'}
               </p>
             </div>
           </div>
@@ -392,6 +412,17 @@ export default function ReportsPage() {
                       <th className="px-4 py-2.5 text-right">Share (%)</th>
                     </>
                   )}
+                  {reportType === 'shift' && (
+                    <>
+                      <th className="px-4 py-2.5">Operator</th>
+                      <th className="px-4 py-2.5 text-center">Total Trips</th>
+                      <th className="px-4 py-2.5 text-center">Completed</th>
+                      <th className="px-4 py-2.5 text-center">Pending Verif</th>
+                      <th className="px-4 py-2.5 text-center">Manual Overrides</th>
+                      <th className="px-4 py-2.5 text-right">Total Net (kg)</th>
+                      <th className="px-4 py-2.5 text-right">Tonnage (t)</th>
+                    </>
+                  )}
                   {reportType === 'activity' && (
                     <>
                       <th className="px-4 py-2.5">Operator</th>
@@ -404,7 +435,7 @@ export default function ReportsPage() {
               <tbody className="divide-y divide-zinc-100 text-zinc-700">
                 {reportData.length === 0 ? (
                   <tr>
-                    <td colSpan={5} className="px-4 py-12 text-center text-zinc-400">
+                    <td colSpan={7} className="px-4 py-12 text-center text-zinc-400">
                       No certified weighing records match the selected date range and filter criteria.
                     </td>
                   </tr>
@@ -427,6 +458,36 @@ export default function ReportsPage() {
                           </td>
                           <td className="px-4 py-2.5 text-right font-mono text-zinc-500 font-semibold">
                             {pct.toFixed(1)}%
+                          </td>
+                        </tr>
+                      );
+                    }
+
+                    if (reportType === 'shift') {
+                      const netKg = Number(row.total_net_weight || 0);
+                      return (
+                        <tr key={idx} className="hover:bg-zinc-50/80 transition-colors">
+                          <td className="px-4 py-2.5 font-bold text-zinc-900 flex items-center gap-2">
+                            <div className="w-5 h-5 rounded-full bg-zinc-900 text-white flex items-center justify-center text-[10px] uppercase font-mono">
+                              {(row.operator__username || 'U')[0]}
+                            </div>
+                            <span>{row.operator__username || 'Terminal Operator'}</span>
+                          </td>
+                          <td className="px-4 py-2.5 text-center font-mono font-bold text-zinc-800">{row.total_tickets}</td>
+                          <td className="px-4 py-2.5 text-center font-mono text-emerald-700 font-bold">{row.completed_tickets}</td>
+                          <td className="px-4 py-2.5 text-center font-mono text-amber-700 font-bold">{row.pending_verification}</td>
+                          <td className="px-4 py-2.5 text-center font-mono">
+                            {row.manual_overrides > 0 ? (
+                              <span className="px-2 py-0.5 rounded bg-rose-50 text-rose-700 font-bold border border-rose-200">
+                                {row.manual_overrides}
+                              </span>
+                            ) : (
+                              <span className="text-zinc-400">0</span>
+                            )}
+                          </td>
+                          <td className="px-4 py-2.5 text-right font-mono text-zinc-800">{netKg.toLocaleString()} kg</td>
+                          <td className="px-4 py-2.5 text-right font-mono font-bold text-emerald-700">
+                            {(netKg / 1000).toFixed(2)} t
                           </td>
                         </tr>
                       );

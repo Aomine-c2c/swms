@@ -206,7 +206,8 @@ export const Sidebar: React.FC = () => {
         {/* Scrollable Nav Sections */}
         <nav className="flex-1 overflow-y-auto p-2 space-y-3">
           {navCategories.map((cat) => {
-            const visibleItems = cat.items.filter((item) => item.allowed);
+            const isAdmin = user?.is_superuser || isRole('Administrator') || isRole('Admin');
+            const visibleItems = cat.items.filter((item) => isAdmin || item.allowed);
             if (visibleItems.length === 0) return null;
 
             const isCollapsed = !!collapsedSections[cat.title];

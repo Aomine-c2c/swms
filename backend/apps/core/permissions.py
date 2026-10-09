@@ -59,8 +59,9 @@ ROLE_PERMISSIONS = {
 def get_user_permissions(user):
     if not user or not user.is_authenticated:
         return []
-    if getattr(user, 'is_superuser', False):
-        # Superuser has all defined permissions
+    is_admin = getattr(user, 'is_superuser', False) or (getattr(user, 'role', None) and user.role.name.lower() in ['administrator', 'admin'])
+    if is_admin:
+        # Superuser and Administrator role have all defined permissions
         all_perms = set()
         for perms in ROLE_PERMISSIONS.values():
             all_perms.update(perms)
@@ -78,7 +79,8 @@ def HasPermission(required_permission):
         def has_permission(self, request, view):
             if not request.user or not request.user.is_authenticated:
                 return False
-            if getattr(request.user, 'is_superuser', False):
+            is_admin = getattr(request.user, 'is_superuser', False) or (getattr(request.user, 'role', None) and request.user.role.name.lower() in ['administrator', 'admin'])
+            if is_admin:
                 return True
             if not getattr(request.user, 'role', None):
                 return False

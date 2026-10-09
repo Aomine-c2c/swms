@@ -14,14 +14,6 @@ interface RouteGuardProps {
 export const RouteGuard: React.FC<RouteGuardProps> = ({ children, permission, roles }) => {
   const { user, loading, hasPermission, isRole } = useAuth();
 
-  if (loading) {
-    return (
-      <div className="flex h-64 items-center justify-center">
-        <div className="w-5 h-5 border-2 border-zinc-900 border-t-transparent rounded-full animate-spin" />
-      </div>
-    );
-  }
-
   React.useEffect(() => {
     if (!loading && !user) {
       if (typeof window !== 'undefined') {
@@ -29,6 +21,14 @@ export const RouteGuard: React.FC<RouteGuardProps> = ({ children, permission, ro
       }
     }
   }, [loading, user]);
+
+  if (loading) {
+    return (
+      <div className="flex h-64 items-center justify-center">
+        <div className="w-5 h-5 border-2 border-zinc-900 border-t-transparent rounded-full animate-spin" />
+      </div>
+    );
+  }
 
   if (!user) {
     return (
@@ -38,8 +38,9 @@ export const RouteGuard: React.FC<RouteGuardProps> = ({ children, permission, ro
     );
   }
 
-  const roleAllowed = !roles || roles.some((r) => isRole(r));
-  const permAllowed = !permission || hasPermission(permission);
+  const isAdmin = user.is_superuser || isRole('Administrator') || isRole('Admin');
+  const roleAllowed = isAdmin || !roles || roles.some((r) => isRole(r));
+  const permAllowed = isAdmin || !permission || hasPermission(permission);
 
   if (!roleAllowed || !permAllowed) {
     return (

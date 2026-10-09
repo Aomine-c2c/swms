@@ -12,6 +12,14 @@ export const AppShell: React.FC<{ children: React.ReactNode }> = ({ children }) 
 
   const isLoginPage = pathname === '/login';
 
+  React.useEffect(() => {
+    if (!loading && !user && !isLoginPage) {
+      if (typeof window !== 'undefined') {
+        window.location.href = '/login';
+      }
+    }
+  }, [loading, user, isLoginPage]);
+
   if (loading) {
     return (
       <div className="min-h-screen bg-[#fbfbfb] flex items-center justify-center">
@@ -22,14 +30,6 @@ export const AppShell: React.FC<{ children: React.ReactNode }> = ({ children }) 
       </div>
     );
   }
-
-  React.useEffect(() => {
-    if (!loading && !user && !isLoginPage) {
-      if (typeof window !== 'undefined') {
-        window.location.href = '/login';
-      }
-    }
-  }, [loading, user, isLoginPage]);
 
   if (isLoginPage) {
     return <main className="min-h-screen bg-[#fbfbfb] text-zinc-900">{children}</main>;
