@@ -25,6 +25,7 @@ import {
 import { api } from '@/lib/api';
 import { Driver, Carrier, WeighingTransaction } from '@/types';
 import { RouteGuard } from '@/components/auth/RouteGuard';
+import { DetailPanel } from '@/components/common/DetailPanel';
 
 export default function DriversPage() {
   const [drivers, setDrivers] = useState<Driver[]>([]);
@@ -33,8 +34,9 @@ export default function DriversPage() {
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<'All' | 'Active' | 'Inactive'>('All');
 
-  // Selected Driver for visual detail panel / drawer
+  // Selected Driver for visual detail panel & slide-out DetailPanel
   const [selectedDriver, setSelectedDriver] = useState<Driver | null>(null);
+  const [isDetailPanelOpen, setIsDetailPanelOpen] = useState(false);
   const [driverTxHistory, setDriverTxHistory] = useState<WeighingTransaction[]>([]);
   const [loadingHistory, setLoadingHistory] = useState(false);
 
@@ -68,8 +70,9 @@ export default function DriversPage() {
     fetchData();
   }, []);
 
-  const handleSelectDriver = async (d: Driver) => {
+  const handleSelectDriver = async (d: Driver, openDrawer = false) => {
     setSelectedDriver(d);
+    if (openDrawer) setIsDetailPanelOpen(true);
     try {
       setLoadingHistory(true);
       const res = await api.get(`/transactions/?driver_id=${d.id}&ordering=-first_weighing_datetime&page_size=6`);
@@ -184,7 +187,7 @@ export default function DriversPage() {
   });
 
   return (
-    <RouteGuard roles={['Administrator', 'Operator', 'Supervisor']}>
+    <RouteGuard roles={['Administrator', 'Operator', 'Supervisor', 'Manager']}>
       <div className="space-y-6">
         
         {/* Header Bar */}
@@ -342,8 +345,14 @@ export default function DriversPage() {
                             </button>
                           </td>
 
-                          <td className="px-4 py-3 text-right">
+                          <td className="px-4 py-3 text-right" onClick={(e) => e.stopPropagation()}>
                             <div className="flex items-center justify-end gap-1.5">
+                              <button
+                                onClick={() => handleSelectDriver(d, true)}
+                                className="px-2.5 py-1 rounded-md border border-zinc-200 hover:bg-zinc-100 text-[11px] font-semibold text-zinc-700 transition-colors"
+                              >
+                                View
+                              </button>
                               <button
                                 onClick={(e) => handleOpenEdit(d, e)}
                                 className="px-2.5 py-1 rounded-md border border-zinc-200 hover:bg-zinc-200 text-[11px] font-semibold text-zinc-700 transition-colors"
@@ -508,6 +517,96 @@ export default function DriversPage() {
           </div>
 
         </div>
+
+        {/* UNIVERSAL SLIDE-OUT DETAIL PANEL FOR DRIVERS */}
+        <DetailPanel
+          isOpen={isDetailPanelOpen}
+          onClose={() => setIsDetailPanelOpen(false)}
+          title={selectedDriver ? selectedDriver.name : 'Driver Profile'}
+          subtitle={selectedDriver ? `License: ${selectedDriver.license_number || 'Pending'} • ID #${selectedDriver.id}` : ''}
+          badge={
+            selectedDriver && (
+              <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                selectedDriver.status === 'Active'
+                  ? 'bg-zinc-900 text-white'
+                  : 'bg-zinc-100 text-zinc-500 border border-zinc-300'
+              }`}>
+                {selectedDriver.status || 'Active'}
+              </span>
+            )
+          }
+          width="max-w-xl"
+          headerActions={
+            selectedDriver && (
+              <button
+                onClick={() => {
+                  setIsDetailPanelOpen(false);
+                  handleOpenEdit(selectedDriver);
+                }}
+                className="px-3 py-1.5 rounded-lg bg-zinc-900 hover:bg-black text-white text-xs font-semibold shadow-sm"
+              >
+                Edit Profile
+              </button>
+            )
+          }
+        >
+          {selectedDriver && (
+            <div className="space-y-6">
+              {/* Profile Card */}
+              <div className="p-4 rounded-xl bg-zinc-50 border border-zinc-200 space-y-3 text-xs">
+                <div className="flex justify-between items-center py-1 border-b border-zinc-200">
+                  <span className="text-zinc-500">Commercial License:</span>
+                  <span className="font-mono font-bold text-zinc-900">{selectedDriver.license_number || 'Pending DL Verification'}</span>
+                </div>
+                <div className="flex justify-between items-center py-1 border-b border-zinc-200">
+                  <span className="text-zinc-500">Contact Telephone:</span>
+                  <span className="font-mono font-semibold text-zinc-900">{selectedDriver.contact_info || selectedDriver.phone || 'None Provided'}</span>
+                </div>
+                <div className="flex justify-between items-center py-1">
+                  <span className="text-zinc-500">License Expiry:</span>
+                  <span className="font-mono font-semibold text-zinc-900">{selectedDriver.license_expiry || 'Valid Commercial'}</span>
+                </div>
+              </div>
+
+              {/* Recent Weighing Trips */}
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-[10px] uppercase font-bold text-zinc-400 font-mono">Recent Trips</span>
+                  <Link href={`/transactions`} className="text-[11px] text-zinc-600 hover:text-zinc-900 font-semibold underline">
+                    Terminal Console
+                  </Link>
+                </div>
+
+                {loadingHistory ? (
+                  <div className="py-6 text-center text-xs text-zinc-400 font-mono">Loading history...</div>
+                ) : driverTxHistory.length === 0 ? (
+                  <div className="p-4 rounded-lg bg-zinc-50 border border-zinc-200 text-center text-xs text-zinc-400">
+                    No weighbridge trips registered for this driver yet.
+                  </div>
+                ) : (
+                  <div className="divide-y divide-zinc-100 border border-zinc-200 rounded-xl overflow-hidden bg-white text-xs">
+                    {driverTxHistory.map((tx) => (
+                      <div key={tx.id} className="p-3 flex items-center justify-between hover:bg-zinc-50">
+                        <div>
+                          <span className="font-mono font-bold text-zinc-900 block">{tx.ticket_number || `TKT-#${tx.id}`}</span>
+                          <span className="text-[10px] text-zinc-500">
+                            {typeof tx.vehicle === 'object' ? tx.vehicle.license_plate : tx.vehicle_license || 'TRUCK'}
+                          </span>
+                        </div>
+                        <div className="text-right">
+                          <span className="font-mono font-black text-zinc-900 block">
+                            {tx.net_weight ? `${Number(tx.net_weight).toLocaleString()} kg` : tx.status}
+                          </span>
+                          <span className="text-[10px] text-zinc-400 font-mono">{new Date(tx.first_weighing_datetime).toLocaleDateString()}</span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+        </DetailPanel>
 
         {/* Modal: Create / Edit Driver */}
         {isModalOpen && (

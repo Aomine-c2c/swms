@@ -48,10 +48,10 @@ class PermissionAPITests(APITestCase):
         resp = self.client.post('/api/v1/transactions/', {})
         self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
         
-        # Admin cannot create transaction (unless we add it, currently they don't have create_transactions)
+        # Admin has all permissions, so admin also passes permission check and reaches validation (400)
         self.client.force_authenticate(user=self.admin)
         resp = self.client.post('/api/v1/transactions/', {})
-        self.assertEqual(resp.status_code, status.HTTP_403_FORBIDDEN)
+        self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
 
     def test_audit_log_permissions(self):
         self.client.force_authenticate(user=self.supervisor)
@@ -66,5 +66,6 @@ class PermissionAPITests(APITestCase):
         self.client.force_authenticate(user=self.operator)
         resp = self.client.get('/api/v1/auth/me/')
         self.assertEqual(resp.status_code, status.HTTP_200_OK)
-        self.assertIn('capture_weights', resp.data['permissions'])
-        self.assertNotIn('manage_users', resp.data['permissions'])
+        perms = resp.data.get('permissions', [])
+        self.assertIn('capture_weights', perms)
+        self.assertNotIn('manage_users', perms)

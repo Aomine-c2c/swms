@@ -100,7 +100,7 @@ export default function ApprovalsPage() {
   });
 
   return (
-    <RouteGuard roles={['Supervisor', 'Administrator']}>
+    <RouteGuard roles={['Supervisor', 'Manager', 'Administrator']}>
       <div className="space-y-6">
         
         {/* Header Bar */}
@@ -214,17 +214,25 @@ export default function ApprovalsPage() {
                           </td>
 
                           <td className="px-4 py-3">
-                            <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-mono font-bold border ${
-                              req.action === 'OVERWEIGHT_EXCEPTION'
-                                ? 'bg-rose-50 text-rose-800 border-rose-200'
-                                : req.action === 'TARE_TOLERANCE_EXCEPTION'
-                                ? 'bg-amber-50 text-amber-900 border-amber-200'
-                                : 'bg-zinc-100 text-zinc-800 border-zinc-200'
-                            }`}>
-                              {req.action === 'OVERWEIGHT_EXCEPTION' && <AlertTriangle className="w-3 h-3 text-rose-600" />}
-                              {req.action === 'TARE_TOLERANCE_EXCEPTION' && <Scale className="w-3 h-3 text-amber-600" />}
-                              {req.action.replace('_EXCEPTION', '')}
-                            </span>
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                              <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-mono font-bold border ${
+                                req.action === 'OVERWEIGHT_EXCEPTION'
+                                  ? 'bg-rose-50 text-rose-800 border-rose-200'
+                                  : req.action === 'TARE_TOLERANCE_EXCEPTION'
+                                  ? 'bg-amber-50 text-amber-900 border-amber-200'
+                                  : 'bg-zinc-100 text-zinc-800 border-zinc-200'
+                              }`}>
+                                {req.action === 'OVERWEIGHT_EXCEPTION' && <AlertTriangle className="w-3 h-3 text-rose-600" />}
+                                {req.action === 'TARE_TOLERANCE_EXCEPTION' && <Scale className="w-3 h-3 text-amber-600" />}
+                                {req.action.replace('_EXCEPTION', '')}
+                              </span>
+
+                              {req.changes_payload?.delta !== undefined && (
+                                <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-mono font-bold bg-rose-100 text-rose-700">
+                                  +{Number(req.changes_payload.delta).toLocaleString()} kg
+                                </span>
+                              )}
+                            </div>
                           </td>
 
                           <td className="px-4 py-3">

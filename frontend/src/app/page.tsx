@@ -862,10 +862,21 @@ export default function DashboardPage() {
                   {materialsMoved.map((m, idx) => {
                     const weightKg = Number(m.total_weight) || 0;
                     const pct = totalCommodityKg > 0 ? Math.round((weightKg / totalCommodityKg) * 100) : 0;
+                    const isSelected = search === m.material__name;
                     return (
-                      <div key={idx} className="space-y-1">
+                      <div 
+                        key={idx} 
+                        onClick={() => setSearch(isSelected ? '' : m.material__name)}
+                        className={`space-y-1 p-1.5 -mx-1.5 rounded-lg cursor-pointer transition-colors ${
+                          isSelected ? 'bg-zinc-100 ring-1 ring-zinc-300' : 'hover:bg-zinc-50'
+                        }`}
+                        title={isSelected ? 'Click to clear material filter' : `Click to filter table by ${m.material__name}`}
+                      >
                         <div className="flex items-center justify-between text-[11px]">
-                          <span className="font-semibold text-zinc-800 truncate max-w-[170px]">{m.material__name || 'Bulk Material'}</span>
+                          <span className="font-semibold text-zinc-800 truncate max-w-[170px] flex items-center gap-1.5">
+                            {isSelected && <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />}
+                            {m.material__name || 'Bulk Material'}
+                          </span>
                           <span className="font-mono text-zinc-900 font-bold">
                             {(weightKg / 1000).toFixed(1)} t <span className="text-zinc-400 font-normal">({pct}%)</span>
                           </span>
@@ -873,7 +884,7 @@ export default function DashboardPage() {
                         <div className="h-2 w-full bg-zinc-100 rounded-full overflow-hidden">
                           <div 
                             style={{ width: `${pct}%` }} 
-                            className="h-full bg-zinc-900 rounded-full transition-all duration-300"
+                            className={`h-full rounded-full transition-all duration-300 ${isSelected ? 'bg-emerald-600' : 'bg-zinc-900'}`}
                           />
                         </div>
                       </div>

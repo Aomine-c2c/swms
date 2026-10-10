@@ -24,6 +24,7 @@ import {
 import { api } from '@/lib/api';
 import { Vehicle, Carrier, Driver, WeighingTransaction } from '@/types';
 import { RouteGuard } from '@/components/auth/RouteGuard';
+import { DetailPanel } from '@/components/common/DetailPanel';
 
 export default function VehiclesPage() {
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
@@ -33,8 +34,9 @@ export default function VehiclesPage() {
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<'All' | 'Active' | 'Inactive' | 'Expiring'>('All');
 
-  // Selected vehicle for visual detail card
+  // Selected vehicle for visual detail card & slide-out DetailPanel
   const [selectedVehicle, setSelectedVehicle] = useState<Vehicle | null>(null);
+  const [isDetailPanelOpen, setIsDetailPanelOpen] = useState(false);
   const [vehicleTxHistory, setVehicleTxHistory] = useState<WeighingTransaction[]>([]);
   const [loadingHistory, setLoadingHistory] = useState(false);
 
@@ -70,8 +72,9 @@ export default function VehiclesPage() {
     fetchData();
   }, []);
 
-  const handleSelectVehicle = async (v: Vehicle) => {
+  const handleSelectVehicle = async (v: Vehicle, openDrawer = false) => {
     setSelectedVehicle(v);
+    if (openDrawer) setIsDetailPanelOpen(true);
     try {
       setLoadingHistory(true);
       const res = await api.get(`/transactions/?vehicle_id=${v.id}&ordering=-first_weighing_datetime&page_size=6`);
@@ -80,6 +83,20 @@ export default function VehiclesPage() {
       setVehicleTxHistory([]);
     } finally {
       setLoadingHistory(false);
+    }
+  };
+
+  const handleToggleStatus = async (v: Vehicle, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+    const newStatus = v.status === 'Active' ? 'Inactive' : 'Active';
+    try {
+      const res = await api.patch(`/vehicles/${v.id}/`, { status: newStatus });
+      if (selectedVehicle?.id === v.id) {
+        setSelectedVehicle({ ...selectedVehicle, status: newStatus });
+      }
+      fetchData();
+    } catch (err: any) {
+      alert(JSON.stringify(err.response?.data || 'Failed to toggle vehicle status.'));
     }
   };
 
@@ -209,7 +226,7 @@ export default function VehiclesPage() {
   });
 
   return (
-    <RouteGuard roles={['Administrator', 'Operator', 'Supervisor']}>
+    <RouteGuard roles={['Administrator', 'Operator', 'Supervisor', 'Manager']}>
       <div className="space-y-6">
         
         {/* Header Title & Action Bar */}
@@ -308,13 +325,14 @@ export default function VehiclesPage() {
                     <th className="px-4 py-3">Tare (kg)</th>
                     <th className="px-4 py-3">Carrier / Fleet</th>
                     <th className="px-4 py-3">Registration</th>
+                    <th className="px-4 py-3">Status</th>
                     <th className="px-4 py-3 text-right">Action</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-zinc-100 text-zinc-700">
                   {filtered.length === 0 ? (
                     <tr>
-                      <td colSpan={5} className="px-4 py-12 text-center text-zinc-400">
+                      <td colSpan={6} className="px-4 py-12 text-center text-zinc-400">
                         No vehicles found matching the filter criteria.
                       </td>
                     </tr>
@@ -382,8 +400,34 @@ export default function VehiclesPage() {
                             </span>
                           </td>
 
-                          <td className="px-4 py-3 text-right">
+                          <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
+                            <button
+                              type="button"
+                              onClick={(e) => handleToggleStatus(v, e)}
+                              className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded text-[10px] font-semibold border transition-all ${
+                                v.status === 'Active'
+                                  ? 'bg-zinc-100 text-zinc-900 border-zinc-300 hover:bg-zinc-200'
+                                  : 'bg-zinc-50 text-zinc-400 border-zinc-200 hover:bg-zinc-100'
+                              }`}
+                              title="Click to toggle status"
+                            >
+                              <span
+                                className={`w-1.5 h-1.5 rounded-full ${
+                                  v.status === 'Active' ? 'bg-zinc-900' : 'bg-zinc-400'
+                                }`}
+                              />
+                              {v.status || 'Active'}
+                            </button>
+                          </td>
+
+                          <td className="px-4 py-3 text-right" onClick={(e) => e.stopPropagation()}>
                             <div className="flex items-center justify-end gap-1.5">
+                              <button
+                                onClick={() => handleSelectVehicle(v, true)}
+                                className="px-2.5 py-1 rounded-md border border-zinc-200 hover:bg-zinc-100 text-[11px] font-semibold text-zinc-700 transition-colors"
+                              >
+                                View
+                              </button>
                               <button
                                 onClick={(e) => handleOpenEdit(v, e)}
                                 className="px-2.5 py-1 rounded-md border border-zinc-200 hover:bg-zinc-200 text-[11px] font-semibold text-zinc-700 transition-colors"
@@ -586,6 +630,117 @@ export default function VehiclesPage() {
           </div>
 
         </div>
+
+        {/* UNIVERSAL SLIDE-OUT DETAIL PANEL FOR VEHICLES */}
+        <DetailPanel
+          isOpen={isDetailPanelOpen}
+          onClose={() => setIsDetailPanelOpen(false)}
+          title={selectedVehicle ? selectedVehicle.license_plate : 'Vehicle Profile'}
+          subtitle={selectedVehicle ? `${selectedVehicle.vehicle_type || 'Commercial Hauler'} • ID #${selectedVehicle.id}` : ''}
+          badge={
+            selectedVehicle && (
+              <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                selectedVehicle.status === 'Active'
+                  ? 'bg-zinc-900 text-white'
+                  : 'bg-zinc-100 text-zinc-500 border border-zinc-300'
+              }`}>
+                {selectedVehicle.status || 'Active'}
+              </span>
+            )
+          }
+          width="max-w-xl"
+          headerActions={
+            selectedVehicle && (
+              <button
+                onClick={() => {
+                  setIsDetailPanelOpen(false);
+                  handleOpenEdit(selectedVehicle);
+                }}
+                className="px-3 py-1.5 rounded-lg bg-zinc-900 hover:bg-black text-white text-xs font-semibold shadow-sm"
+              >
+                Edit Profile
+              </button>
+            )
+          }
+        >
+          {selectedVehicle && (
+            <div className="space-y-6">
+              {/* Tare & Capacity Metric Bar */}
+              <div className="grid grid-cols-2 gap-3">
+                <div className="p-3.5 rounded-xl bg-zinc-50 border border-zinc-200">
+                  <span className="text-[10px] uppercase font-bold text-zinc-400 font-mono">Calibrated Tare</span>
+                  <div className="text-xl font-mono font-black text-zinc-900 mt-1">
+                    {selectedVehicle.known_tare_weight || selectedVehicle.tare_weight 
+                      ? `${Number(selectedVehicle.known_tare_weight || selectedVehicle.tare_weight).toLocaleString()} kg`
+                      : 'Variable'}
+                  </div>
+                  <span className="text-[10px] text-zinc-500 mt-0.5 block">Tolerance: ±{selectedVehicle.tare_tolerance_pct || '2.0'}%</span>
+                </div>
+
+                <div className="p-3.5 rounded-xl bg-zinc-50 border border-zinc-200">
+                  <span className="text-[10px] uppercase font-bold text-zinc-400 font-mono">Max Capacity</span>
+                  <div className="text-xl font-mono font-black text-zinc-900 mt-1">
+                    {selectedVehicle.max_capacity ? `${Number(selectedVehicle.max_capacity).toLocaleString()} kg` : 'Standard Limit'}
+                  </div>
+                  <span className="text-[10px] text-zinc-500 mt-0.5 block">Gross axle limit</span>
+                </div>
+              </div>
+
+              {/* Relations & Regulatory */}
+              <div className="p-4 rounded-xl border border-zinc-200 bg-white space-y-3 text-xs">
+                <div className="flex justify-between items-center py-1 border-b border-zinc-100">
+                  <span className="text-zinc-500">Carrier / Fleet:</span>
+                  <span className="font-bold text-zinc-900">{selectedVehicle.carrier_name || 'Independent'}</span>
+                </div>
+                <div className="flex justify-between items-center py-1 border-b border-zinc-100">
+                  <span className="text-zinc-500">Default Driver:</span>
+                  <span className="font-bold text-zinc-900">{selectedVehicle.default_driver_name || 'Variable Driver'}</span>
+                </div>
+                <div className="flex justify-between items-center py-1 border-b border-zinc-100">
+                  <span className="text-zinc-500">Registration Expiry:</span>
+                  <span className="font-mono font-semibold text-zinc-900">{selectedVehicle.registration_expiry || 'Not Recorded'}</span>
+                </div>
+                <div className="flex justify-between items-center py-1">
+                  <span className="text-zinc-500">Last Inspection:</span>
+                  <span className="font-mono font-semibold text-zinc-900">{selectedVehicle.last_inspection_date || 'Current'}</span>
+                </div>
+              </div>
+
+              {/* Recent Trip Activity in Drawer */}
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-[10px] uppercase font-bold text-zinc-400 font-mono">Recent Scale Tickets</span>
+                  <Link href={`/transactions`} className="text-[11px] text-zinc-600 hover:text-zinc-900 font-semibold underline">
+                    Console
+                  </Link>
+                </div>
+
+                {loadingHistory ? (
+                  <div className="py-6 text-center text-xs text-zinc-400 font-mono">Loading telemetry...</div>
+                ) : vehicleTxHistory.length === 0 ? (
+                  <div className="p-4 rounded-lg bg-zinc-50 border border-zinc-200 text-center text-xs text-zinc-400">
+                    No weighbridge tickets recorded for this truck yet.
+                  </div>
+                ) : (
+                  <div className="divide-y divide-zinc-100 border border-zinc-200 rounded-xl overflow-hidden bg-white text-xs">
+                    {vehicleTxHistory.map((tx) => (
+                      <div key={tx.id} className="p-3 flex items-center justify-between hover:bg-zinc-50">
+                        <div>
+                          <span className="font-mono font-bold text-zinc-900 block">{tx.ticket_number || `TKT-#${tx.id}`}</span>
+                          <span className="text-[10px] text-zinc-500">{new Date(tx.first_weighing_datetime || '').toLocaleDateString()}</span>
+                        </div>
+                        <div className="text-right">
+                          <span className="font-mono font-black text-zinc-900 block">{tx.net_weight ? `${Number(tx.net_weight).toLocaleString()} kg` : 'In Progress'}</span>
+                          <span className="text-[10px] text-zinc-400 font-medium">{tx.status}</span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+        </DetailPanel>
 
         {/* Modal: Create / Edit Vehicle */}
         {isModalOpen && (

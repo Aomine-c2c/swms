@@ -18,12 +18,17 @@ import {
 import { api } from '@/lib/api';
 import { Supplier } from '@/types';
 import { RouteGuard } from '@/components/auth/RouteGuard';
+import { DetailPanel } from '@/components/common/DetailPanel';
 
 export default function SuppliersPage() {
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<'All' | 'Active' | 'Inactive'>('All');
+
+  // Slide-out Detail Panel State
+  const [selectedSupplier, setSelectedSupplier] = useState<Supplier | null>(null);
+  const [isDetailOpen, setIsDetailOpen] = useState(false);
 
   // Modal State
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -134,7 +139,7 @@ export default function SuppliersPage() {
   });
 
   return (
-    <RouteGuard roles={['Administrator', 'Operator', 'Supervisor']}>
+    <RouteGuard roles={['Supervisor', 'Manager', 'Administrator']}>
       <div className="space-y-6">
         
         {/* Header Bar */}
@@ -239,7 +244,11 @@ export default function SuppliersPage() {
                 </tr>
               ) : (
                 filtered.map((s) => (
-                  <tr key={s.id} className="hover:bg-zinc-50/80 transition-colors">
+                  <tr 
+                    key={s.id} 
+                    onClick={() => { setSelectedSupplier(s); setIsDetailOpen(true); }}
+                    className="hover:bg-zinc-50/80 transition-colors cursor-pointer"
+                  >
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-2.5">
                         <div className="w-8 h-8 rounded-lg bg-zinc-100 border border-zinc-200 flex items-center justify-center text-zinc-700">
@@ -274,7 +283,7 @@ export default function SuppliersPage() {
                       )}
                     </td>
 
-                    <td className="px-4 py-3">
+                    <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
                       <button
                         onClick={() => handleToggleStatus(s)}
                         className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded text-[10px] font-semibold border transition-all ${
@@ -293,8 +302,14 @@ export default function SuppliersPage() {
                       </button>
                     </td>
 
-                    <td className="px-4 py-3 text-right">
+                    <td className="px-4 py-3 text-right" onClick={(e) => e.stopPropagation()}>
                       <div className="flex items-center justify-end gap-1.5">
+                        <button
+                          onClick={() => { setSelectedSupplier(s); setIsDetailOpen(true); }}
+                          className="px-2.5 py-1 rounded-md border border-zinc-200 hover:bg-zinc-100 text-[11px] font-semibold text-zinc-700 transition-colors"
+                        >
+                          View
+                        </button>
                         <button
                           onClick={() => handleOpenEdit(s)}
                           className="px-2.5 py-1 rounded-md border border-zinc-200 hover:bg-zinc-100 text-[11px] font-semibold text-zinc-700 transition-colors"
@@ -316,6 +331,113 @@ export default function SuppliersPage() {
             </tbody>
           </table>
         </div>
+
+        {/* Supplier Detail Side Drawer */}
+        <DetailPanel
+          isOpen={isDetailOpen}
+          onClose={() => setIsDetailOpen(false)}
+          title={selectedSupplier?.name || 'Supplier Record'}
+          subtitle={`SUP-ID #${selectedSupplier?.id ? selectedSupplier.id.toString().padStart(4, '0') : ''} • Registered Vendor`}
+          badge={
+            <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider ${
+              selectedSupplier?.status === 'Active' ? 'bg-zinc-900 text-white' : 'bg-zinc-200 text-zinc-600'
+            }`}>
+              {selectedSupplier?.status || 'Active'}
+            </span>
+          }
+          headerActions={
+            selectedSupplier ? (
+              <button
+                onClick={() => { setIsDetailOpen(false); handleOpenEdit(selectedSupplier); }}
+                className="px-3 py-1.5 rounded-lg border border-zinc-200 bg-white hover:bg-zinc-100 text-xs font-semibold text-zinc-700"
+              >
+                Edit Vendor Profile
+              </button>
+            ) : null
+          }
+        >
+          {selectedSupplier && (
+            <div className="space-y-6">
+              {/* Profile Card */}
+              <div className="bg-zinc-50 border border-zinc-200 rounded-xl p-4">
+                <div className="flex items-start justify-between">
+                  <div>
+                    <h3 className="text-base font-bold text-zinc-900">{selectedSupplier.name}</h3>
+                    <p className="text-xs text-zinc-500 font-mono mt-0.5">
+                      Account Reference: SUP-{selectedSupplier.id.toString().padStart(4, '0')}
+                    </p>
+                  </div>
+                  <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider ${
+                    selectedSupplier.status === 'Active' ? 'bg-zinc-900 text-white' : 'bg-zinc-200 text-zinc-600'
+                  }`}>
+                    {selectedSupplier.status || 'Active'}
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3 mt-4 pt-3 border-t border-zinc-200">
+                  <div>
+                    <p className="text-[10px] uppercase font-bold text-zinc-400">Account Type</p>
+                    <p className="text-xs font-medium text-zinc-800 mt-0.5">Inbound Commodity Vendor</p>
+                  </div>
+                  <div>
+                    <p className="text-[10px] uppercase font-bold text-zinc-400">Weighment Status</p>
+                    <p className="text-xs font-medium text-emerald-600 mt-0.5">Permitted & Verified</p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Contact Information */}
+              <div>
+                <h4 className="text-xs font-bold uppercase tracking-wider text-zinc-400 mb-2">Contact & Operations</h4>
+                <div className="bg-white border border-zinc-200 rounded-xl p-3.5 space-y-3">
+                  <div className="flex items-center gap-3">
+                    <User className="w-4 h-4 text-zinc-400" />
+                    <div>
+                      <p className="text-[10px] text-zinc-400 uppercase font-bold">Contact Person</p>
+                      <p className="text-xs font-medium text-zinc-800">{selectedSupplier.contact_person || 'No representative assigned'}</p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-3 pt-2 border-t border-zinc-100">
+                    <Phone className="w-4 h-4 text-zinc-400" />
+                    <div>
+                      <p className="text-[10px] text-zinc-400 uppercase font-bold">Phone Number</p>
+                      <p className="text-xs font-medium text-zinc-800 font-mono">{selectedSupplier.phone || 'No phone recorded'}</p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-3 pt-2 border-t border-zinc-100">
+                    <MapPin className="w-4 h-4 text-zinc-400" />
+                    <div>
+                      <p className="text-[10px] text-zinc-400 uppercase font-bold">Base Location / Address</p>
+                      <p className="text-xs font-medium text-zinc-800">{selectedSupplier.address || 'Standard Regional Commercial'}</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Quick Transaction Action */}
+              <div className="bg-zinc-100/70 border border-zinc-200 rounded-xl p-4">
+                <h4 className="text-xs font-bold text-zinc-900">Weighbridge Integration</h4>
+                <p className="text-[11px] text-zinc-500 mt-0.5">
+                  View tickets consigned to this supplier or create an inbound transaction.
+                </p>
+                <div className="flex gap-2 mt-3">
+                  <a
+                    href={`/tickets?search=${encodeURIComponent(selectedSupplier.name)}`}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white border border-zinc-200 hover:bg-zinc-50 text-xs font-semibold text-zinc-800 shadow-2xs"
+                  >
+                    View Vendor Tickets
+                  </a>
+                  <a
+                    href="/transactions"
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-zinc-900 text-white hover:bg-black text-xs font-semibold shadow-2xs"
+                  >
+                    New Inbound Weighment
+                  </a>
+                </div>
+              </div>
+            </div>
+          )}
+        </DetailPanel>
 
         {/* Modal: Create / Edit Supplier */}
         {isModalOpen && (

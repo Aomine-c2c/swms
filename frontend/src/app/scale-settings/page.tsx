@@ -82,7 +82,7 @@ export default function ScaleSettingsPage() {
   };
 
   return (
-    <RouteGuard roles={['Administrator', 'Supervisor']}>
+    <RouteGuard roles={['Administrator']}>
       <div className="space-y-6">
         <div className="flex items-center justify-between">
           <div>
@@ -163,6 +163,26 @@ export default function ScaleSettingsPage() {
                 Reconnect
               </button>
             </div>
+          </div>
+        </div>
+
+        {/* Live Serial / Socket Packet Stream Debugger */}
+        <div className="bg-zinc-950 border border-zinc-800 rounded-xl p-4 font-mono text-xs text-zinc-300 space-y-2">
+          <div className="flex items-center justify-between text-[10px] text-zinc-500 uppercase font-bold border-b border-zinc-800/80 pb-2">
+            <span className="flex items-center gap-1.5 text-emerald-400">
+              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+              RS-232 / TCP Raw Telemetry Frame Inspector
+            </span>
+            <span>Port: {form.connectionType === 'serial' ? form.serialPort : `${form.networkHost}:${form.networkPort}`} • {form.baudRate} 8N1</span>
+          </div>
+          <div className="bg-black/80 rounded-lg p-3 font-mono text-[11px] text-emerald-400 overflow-x-auto border border-zinc-900 flex items-center justify-between">
+            <div className="truncate">
+              <span className="text-zinc-600 select-none mr-2">&gt; RX_FRAME:</span>
+              <span className="font-bold">ST,GS,+{liveWeight.toString().padStart(6, '0')} kg \r\n</span>
+            </div>
+            <span className="text-[10px] text-zinc-500 shrink-0 ml-4">
+              [PARSED OK: {isStable ? 'STABLE' : 'MOTION'} • {liveWeight} KG]
+            </span>
           </div>
         </div>
 

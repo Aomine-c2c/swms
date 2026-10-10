@@ -53,89 +53,22 @@ class Command(BaseCommand):
             manager_role = Role.objects.create(name='Manager', description='Plant Operations Manager')
             operator_role = Role.objects.create(name='Operator', description='Weighbridge Scale Operator')
 
-            # 3. Users (admin/admin, supervisor/supervisor, manager/manager, operator/operator + faker users)
-            self.stdout.write("Creating Users...")
-            admin_user = User.objects.create(
-                username='admin',
-                email='admin@smart-weigh.local',
-                password=make_password('admin'),
+            # 3. Users (Only single superuser Devine_General)
+            self.stdout.write("Creating Superuser Devine_General...")
+            devine_user = User.objects.create(
+                username='Devine_General',
+                email='devine.general@swms.local',
+                password=make_password('password123'),
                 role=admin_role,
                 is_staff=True,
                 is_superuser=True,
-                first_name='System',
-                last_name='Admin'
+                first_name='Devine',
+                last_name='General'
             )
 
-            supervisor_user = User.objects.create(
-                username='supervisor',
-                email='supervisor@smart-weigh.local',
-                password=make_password('supervisor'),
-                role=supervisor_role,
-                first_name='Sarah',
-                last_name='Jenkins'
-            )
-
-            manager_user = User.objects.create(
-                username='manager',
-                email='manager@smart-weigh.local',
-                password=make_password('manager'),
-                role=manager_role,
-                first_name='Marcus',
-                last_name='Vance'
-            )
-
-            operator_user = User.objects.create(
-                username='operator',
-                email='operator@smart-weigh.local',
-                password=make_password('operator'),
-                role=operator_role,
-                first_name='David',
-                last_name='Miller'
-            )
-
-            operator1_user = User.objects.create(
-                username='operator1',
-                email='operator1@smart-weigh.local',
-                password=make_password('password123'),
-                role=operator_role,
-                first_name='Operator',
-                last_name='One'
-            )
-
-            supervisor1_user = User.objects.create(
-                username='supervisor1',
-                email='supervisor1@smart-weigh.local',
-                password=make_password('password123'),
-                role=supervisor_role,
-                first_name='Supervisor',
-                last_name='One'
-            )
-
-            operators = [operator_user, operator1_user]
-            for i in range(3):
-                op = User.objects.create(
-                    username=f'operator_{fake.user_name()[:10]}',
-                    email=fake.email(),
-                    password=make_password('password123'),
-                    role=operator_role,
-                    first_name=fake.first_name(),
-                    last_name=fake.last_name()
-                )
-                operators.append(op)
-
-            supervisors = [supervisor_user, supervisor1_user]
-            for _ in range(2):
-                sup = User.objects.create(
-                    username=f'sup_{fake.user_name()[:10]}',
-                    email=fake.email(),
-                    password=make_password('password123'),
-                    role=supervisor_role,
-                    first_name=fake.first_name(),
-                    last_name=fake.last_name()
-                )
-                supervisors.append(sup)
-
-            all_users = [admin_user, supervisor_user, manager_user] + operators + supervisors
+            operators = [devine_user]
+            supervisors = [devine_user]
+            all_users = [devine_user]
 
             # 4. Carriers & Fleets
             self.stdout.write("Creating Carriers...")
@@ -423,7 +356,7 @@ class Command(BaseCommand):
                     action=random.choice(['CORRECTION', 'TARE_TOLERANCE_EXCEPTION', 'OVERWEIGHT_EXCEPTION']),
                     status='APPROVED',
                     requested_by=a_tx.operator,
-                    reviewed_by=supervisor_user,
+                    reviewed_by=devine_user,
                     request_reason='Tare deviation inspected on scale platform, approved entry.',
                     review_reason='Verified visual axle condition. Tare variance within secondary tolerance.',
                     changes_payload={'notes': 'Approved by Shift Supervisor'}
@@ -436,7 +369,7 @@ class Command(BaseCommand):
                     action='REVERSAL',
                     status='REJECTED',
                     requested_by=r_tx.operator,
-                    reviewed_by=supervisor_user,
+                    reviewed_by=devine_user,
                     request_reason='Operator requested ticket void due to incorrect material assignment.',
                     review_reason='Discharge already unloaded at stockpile B. Reversal disallowed per SOP.'
                 )

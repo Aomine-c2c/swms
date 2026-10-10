@@ -174,7 +174,7 @@ export default function CarriersPage() {
   });
 
   return (
-    <RouteGuard roles={['Administrator', 'Operator', 'Supervisor']}>
+    <RouteGuard roles={['Supervisor', 'Manager', 'Administrator']}>
       <div className="space-y-6">
         
         {/* Header Bar */}
@@ -339,6 +339,12 @@ export default function CarriersPage() {
 
                           <td className="px-4 py-3 text-right">
                             <div className="flex items-center justify-end gap-1.5">
+                              <button
+                                onClick={() => handleSelectCarrier(c)}
+                                className="px-2.5 py-1 rounded-md border border-zinc-200 hover:bg-zinc-200 text-[11px] font-semibold text-zinc-700 transition-colors"
+                              >
+                                View
+                              </button>
                               <button
                                 onClick={(e) => handleOpenEdit(c, e)}
                                 className="px-2.5 py-1 rounded-md border border-zinc-200 hover:bg-zinc-200 text-[11px] font-semibold text-zinc-700 transition-colors"

@@ -1,12 +1,12 @@
 'use client';
 
-import React, { useEffect, useState, useRef, Suspense } from 'react';
+import React, { useEffect, useState, useRef, useMemo, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 import {
   FileText,
   Printer,
   Search,
-  CheckCircle,
+  CheckCircle2,
   Building2,
   Truck,
   Calendar,
@@ -18,80 +18,160 @@ import {
   QrCode,
   ShieldCheck,
   Receipt,
-  FileCheck
+  FileCheck,
+  RotateCw,
+  Eye,
+  Filter,
+  CheckSquare,
+  Square,
+  Copy,
+  Layers,
+  ArrowRight,
+  TrendingUp,
+  AlertCircle
 } from 'lucide-react';
 import { api } from '@/lib/api';
+import { DetailPanel } from '@/components/common/DetailPanel';
+
+interface TicketItem {
+  id: number;
+  ticket_number: string;
+  created_at: string;
+  updated_at: string;
+  generated_datetime: string;
+  print_count: number;
+  transaction: number;
+  printed_by_name?: string;
+  transaction_details?: any;
+}
 
 function TicketContent() {
   const searchParams = useSearchParams();
   const ticketParam = searchParams.get('ticket');
-  const [ticketQuery, setTicketQuery] = useState(ticketParam || '');
-  const [ticketData, setTicketData] = useState<any | null>(null);
-  const [ticketObj, setTicketObj] = useState<any | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [reprinting, setReprinting] = useState(false);
 
-  // Enhancements State
+  const [tickets, setTickets] = useState<TicketItem[]>([]);
+  const [loadingList, setLoadingList] = useState(true);
+  const [searchQuery, setSearchQuery] = useState(ticketParam || '');
+  const [statusFilter, setStatusFilter] = useState<'ALL' | 'Single' | 'Reprinted'>('ALL');
+
+  // Selected ticket for Slide-out Detail Panel
+  const [selectedTicket, setSelectedTicket] = useState<TicketItem | null>(null);
+  const [isPanelOpen, setIsPanelOpen] = useState(false);
+
+  // Multi-select batch print/export
+  const [selectedIds, setSelectedIds] = useState<number[]>([]);
+
+  // Format and interactive states inside Detail Panel / Print View
   const [ticketFormat, setTicketFormat] = useState<'A4' | 'THERMAL'>('A4');
   const [showSigModal, setShowSigModal] = useState(false);
   const [operatorSig, setOperatorSig] = useState<string | null>(null);
   const [driverSig, setDriverSig] = useState<string | null>(null);
   const [activeSigner, setActiveSigner] = useState<'operator' | 'driver'>('operator');
+  const [reprinting, setReprinting] = useState(false);
 
   // Canvas ref for interactive signature
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const isDrawing = useRef(false);
 
-  const fetchTicket = async (query: string) => {
-    if (!query) return;
+  // Fetch ticket listing
+  const fetchTickets = async () => {
     try {
-      setLoading(true);
-      setError(null);
-      const res = await api.get(`/tickets/?ticket_number=${encodeURIComponent(query)}`);
-      const results = res.data.results || res.data || [];
-      if (results.length > 0) {
-        setTicketObj(results[0]);
-        // Prefer transaction_details if populated
-        setTicketData(results[0].transaction_details || results[0]);
-      } else {
-        // Fallback to fetch transaction directly
-        const txRes = await api.get(`/transactions/${query}/`).catch(() => null);
-        if (txRes?.data) {
-          setTicketData(txRes.data);
-          // Try to get corresponding ticket
-          const tRes = await api.get(`/tickets/?transaction_id=${txRes.data.id}`).catch(() => null);
-          const tList = tRes?.data?.results || tRes?.data || [];
-          if (tList.length > 0) setTicketObj(tList[0]);
-        } else {
-          setError('Ticket or transaction not found.');
-          setTicketData(null);
-          setTicketObj(null);
+      setLoadingList(true);
+      const res = await api.get('/tickets/?page_size=100');
+      const list = res.data.results || res.data || [];
+      setTickets(list);
+
+      // Auto-open if query param is set
+      if (ticketParam) {
+        const found = list.find((t: TicketItem) => 
+          t.ticket_number.toLowerCase() === ticketParam.toLowerCase() ||
+          t.id.toString() === ticketParam ||
+          t.transaction.toString() === ticketParam
+        );
+        if (found) {
+          setSelectedTicket(found);
+          setIsPanelOpen(true);
         }
       }
-    } catch {
-      setError('Failed to fetch ticket.');
-      setTicketData(null);
-      setTicketObj(null);
+    } catch (e) {
+      console.error('Failed to load tickets', e);
     } finally {
-      setLoading(false);
+      setLoadingList(false);
     }
   };
 
   useEffect(() => {
-    if (ticketParam) {
-      fetchTicket(ticketParam);
-    }
-  }, [ticketParam]);
+    fetchTickets();
+  }, []);
 
-  const handlePrint = async () => {
-    if (ticketObj?.id) {
+  // Filtered tickets
+  const filteredTickets = useMemo(() => {
+    return tickets.filter((t) => {
+      const q = searchQuery.toLowerCase().trim();
+      const tx = t.transaction_details || {};
+      const plate = tx.vehicle_details?.license_plate || tx.vehicle_license || '';
+      const supplier = tx.supplier_details?.name || tx.supplier_name || '';
+      const material = tx.material_details?.name || tx.material_name || '';
+
+      const matchesQuery = !q ||
+        t.ticket_number.toLowerCase().includes(q) ||
+        plate.toLowerCase().includes(q) ||
+        supplier.toLowerCase().includes(q) ||
+        material.toLowerCase().includes(q) ||
+        t.id.toString().includes(q);
+
+      const matchesStatus =
+        statusFilter === 'ALL' ||
+        (statusFilter === 'Single' && (t.print_count ?? 1) <= 1) ||
+        (statusFilter === 'Reprinted' && (t.print_count ?? 1) > 1);
+
+      return matchesQuery && matchesStatus;
+    });
+  }, [tickets, searchQuery, statusFilter]);
+
+  // Ribbon KPI stats
+  const stats = useMemo(() => {
+    const total = tickets.length;
+    const reprints = tickets.filter((t) => (t.print_count ?? 1) > 1).length;
+    const totalKg = tickets.reduce((acc, t) => {
+      const net = Number(t.transaction_details?.net_weight || 0);
+      return acc + (isNaN(net) ? 0 : net);
+    }, 0);
+    return {
+      total,
+      reprints,
+      tonnage: (totalKg / 1000).toFixed(1),
+    };
+  }, [tickets]);
+
+  const handleOpenDetail = (ticket: TicketItem) => {
+    setSelectedTicket(ticket);
+    setIsPanelOpen(true);
+  };
+
+  const handleToggleSelect = (id: number) => {
+    setSelectedIds((prev) =>
+      prev.includes(id) ? prev.filter((i) => i !== id) : [...prev, id]
+    );
+  };
+
+  const handleSelectAll = () => {
+    if (selectedIds.length === filteredTickets.length) {
+      setSelectedIds([]);
+    } else {
+      setSelectedIds(filteredTickets.map((t) => t.id));
+    }
+  };
+
+  const handlePrintSelected = async () => {
+    if (selectedTicket) {
       try {
         setReprinting(true);
-        const res = await api.post(`/tickets/${ticketObj.id}/reprint/`);
-        setTicketObj(res.data);
+        const res = await api.post(`/tickets/${selectedTicket.id}/reprint/`);
+        setSelectedTicket(res.data);
+        fetchTickets();
       } catch {
-        // Continue to print even if tracking fails
+        // print even if count tracking fails
       } finally {
         setReprinting(false);
       }
@@ -101,13 +181,21 @@ function TicketContent() {
     }
   };
 
+  const handleDownloadPdf = () => {
+    // Industrial printable trigger formatted for client PDF save
+    if (typeof window !== 'undefined') {
+      window.print();
+    }
+  };
+
   const handleEmailDispatch = () => {
-    const ticketNo = ticketObj?.ticket_number || ticketData?.ticket_number || `TX-${ticketData?.id}`;
-    const subject = encodeURIComponent(`Weighbridge Certificate ${ticketNo}`);
+    if (!selectedTicket) return;
+    const tx = selectedTicket.transaction_details || {};
+    const plate = tx.vehicle_details?.license_plate || tx.vehicle_license || 'N/A';
+    const net = tx.net_weight ? Number(tx.net_weight).toLocaleString() : '-';
+    const subject = encodeURIComponent(`Weighbridge Certificate ${selectedTicket.ticket_number}`);
     const body = encodeURIComponent(
-      `Official Weighbridge Certificate ${ticketNo}\nVehicle: ${
-        ticketData?.vehicle?.license_plate || ticketData?.vehicle_license || 'N/A'
-      }\nCertified Net Weight: ${ticketData?.net_weight ? Number(ticketData.net_weight).toLocaleString() : '-'} kg\nIssued: ${new Date().toLocaleString()}`
+      `Official Weighbridge Certificate ${selectedTicket.ticket_number}\nVehicle: ${plate}\nCertified Net Weight: ${net} kg\nIssued: ${new Date(selectedTicket.generated_datetime).toLocaleString()}`
     );
     window.open(`mailto:?subject=${subject}&body=${body}`, '_blank');
   };
@@ -165,358 +253,513 @@ function TicketContent() {
     setShowSigModal(false);
   };
 
-  const printCount = ticketObj?.print_count ?? 1;
+  const currentTx = selectedTicket?.transaction_details || {};
+  const printCount = selectedTicket?.print_count ?? 1;
   const isReprint = printCount > 1;
 
   return (
     <div className="space-y-6">
-      {/* Header with Title and Global Actions */}
+      {/* Header Bar */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 print:hidden">
         <div>
-          <h2 className="text-xl font-bold tracking-tight text-zinc-900">Weighbridge Tickets & Certificates</h2>
+          <h2 className="text-xl font-bold tracking-tight text-zinc-900 flex items-center gap-2">
+            <FileText className="w-5 h-5 text-zinc-800" />
+            <span>Weighbridge Tickets & Official Slips</span>
+          </h2>
           <p className="text-xs text-zinc-500 mt-0.5">
-            Search, preview, sign, and print official certified weighment documentation
+            Search, preview certificates, inspect reprint logs, and download official weight slips
           </p>
         </div>
 
-        {ticketData && (
-          <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2">
+          <button
+            onClick={fetchTickets}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-zinc-200 bg-white hover:bg-zinc-100 text-xs font-semibold text-zinc-700 transition-colors shadow-xs"
+          >
+            <RotateCw className="w-3.5 h-3.5" />
+            <span>Refresh</span>
+          </button>
+        </div>
+      </div>
+
+      {/* KPI Stats Ribbon */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 print:hidden">
+        <div className="bg-white border border-zinc-200 rounded-xl p-3.5 shadow-2xs flex items-center justify-between">
+          <div>
+            <span className="text-[10px] font-mono font-bold uppercase tracking-wider text-zinc-400">Total Slips Issued</span>
+            <div className="text-xl font-mono font-black text-zinc-900 mt-0.5">{stats.total}</div>
+          </div>
+          <div className="w-8 h-8 rounded-lg bg-zinc-100 flex items-center justify-center text-zinc-700">
+            <FileCheck className="w-4 h-4" />
+          </div>
+        </div>
+
+        <div className="bg-white border border-zinc-200 rounded-xl p-3.5 shadow-2xs flex items-center justify-between">
+          <div>
+            <span className="text-[10px] font-mono font-bold uppercase tracking-wider text-zinc-400">Certified Mass</span>
+            <div className="text-xl font-mono font-black text-zinc-900 mt-0.5">{stats.tonnage} t</div>
+          </div>
+          <div className="w-8 h-8 rounded-lg bg-zinc-100 flex items-center justify-center text-zinc-700">
+            <Scale className="w-4 h-4" />
+          </div>
+        </div>
+
+        <div className="bg-white border border-zinc-200 rounded-xl p-3.5 shadow-2xs flex items-center justify-between">
+          <div>
+            <span className="text-[10px] font-mono font-bold uppercase tracking-wider text-zinc-400">Duplicate Reprints</span>
+            <div className="text-xl font-mono font-black text-amber-700 mt-0.5">{stats.reprints}</div>
+          </div>
+          <div className="w-8 h-8 rounded-lg bg-amber-50 flex items-center justify-center text-amber-700 border border-amber-200">
+            <Copy className="w-4 h-4" />
+          </div>
+        </div>
+      </div>
+
+      {/* Advanced Filter & Search Bar */}
+      <div className="bg-white border border-zinc-200 rounded-xl p-4 shadow-2xs flex flex-col md:flex-row items-center justify-between gap-3 print:hidden">
+        <div className="relative flex-1 w-full">
+          <Search className="w-3.5 h-3.5 text-zinc-400 absolute left-3 top-2.5" />
+          <input
+            type="text"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder="Search by ticket number, vehicle plate, supplier, or material..."
+            className="w-full bg-zinc-50 border border-zinc-200 rounded-lg pl-9 pr-4 py-2 text-xs text-zinc-900 placeholder-zinc-400 focus:outline-none focus:bg-white focus:border-zinc-800 transition-colors"
+          />
+        </div>
+
+        <div className="flex items-center gap-2 w-full md:w-auto">
+          {/* Status Filter Tabs */}
+          <div className="flex border border-zinc-200 rounded-lg p-0.5 bg-zinc-100 text-xs font-semibold">
+            {(['ALL', 'Single', 'Reprinted'] as const).map((s) => (
+              <button
+                key={s}
+                type="button"
+                onClick={() => setStatusFilter(s)}
+                className={`px-3 py-1.5 rounded-md transition-all ${
+                  statusFilter === s ? 'bg-white text-zinc-900 shadow-sm' : 'text-zinc-500 hover:text-zinc-800'
+                }`}
+              >
+                {s === 'ALL' ? 'All Slips' : s === 'Single' ? 'Originals' : 'Duplicates'}
+              </button>
+            ))}
+          </div>
+
+          {selectedIds.length > 0 && (
+            <button
+              onClick={() => {
+                alert(`Batch print queued for ${selectedIds.length} tickets.`);
+              }}
+              className="px-3 py-1.5 rounded-lg bg-zinc-900 hover:bg-black text-white text-xs font-semibold flex items-center gap-1.5 shadow-sm shrink-0"
+            >
+              <Printer className="w-3.5 h-3.5" />
+              <span>Print ({selectedIds.length})</span>
+            </button>
+          )}
+        </div>
+      </div>
+
+      {/* Tickets Explorer Table */}
+      <div className="bg-white border border-zinc-200 rounded-xl shadow-xs overflow-hidden print:hidden">
+        <div className="overflow-x-auto">
+          <table className="w-full text-left text-xs">
+            <thead className="bg-zinc-50/80 text-zinc-500 font-bold border-b border-zinc-200 uppercase text-[10px] tracking-wider">
+              <tr>
+                <th className="px-4 py-3 w-8">
+                  <button
+                    type="button"
+                    onClick={handleSelectAll}
+                    className="text-zinc-400 hover:text-zinc-700"
+                  >
+                    {selectedIds.length === filteredTickets.length && filteredTickets.length > 0 ? (
+                      <CheckSquare className="w-4 h-4 text-zinc-900" />
+                    ) : (
+                      <Square className="w-4 h-4" />
+                    )}
+                  </button>
+                </th>
+                <th className="px-4 py-3">Ticket #</th>
+                <th className="px-4 py-3">Vehicle Plate</th>
+                <th className="px-4 py-3">Material</th>
+                <th className="px-4 py-3">Supplier / Vendor</th>
+                <th className="px-4 py-3 text-right">Net Mass</th>
+                <th className="px-4 py-3 text-center">Print Status</th>
+                <th className="px-4 py-3">Issued Time</th>
+                <th className="px-4 py-3 text-right">Actions</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-zinc-100 text-zinc-700">
+              {loadingList ? (
+                <tr>
+                  <td colSpan={9} className="px-4 py-12 text-center text-zinc-400">
+                    <div className="w-5 h-5 border-2 border-zinc-900 border-t-transparent rounded-full animate-spin mx-auto mb-2" />
+                    <span>Loading tickets...</span>
+                  </td>
+                </tr>
+              ) : filteredTickets.length === 0 ? (
+                <tr>
+                  <td colSpan={9} className="px-4 py-12 text-center text-zinc-400 font-medium">
+                    No tickets found matching current filters.
+                  </td>
+                </tr>
+              ) : (
+                filteredTickets.map((t) => {
+                  const tx = t.transaction_details || {};
+                  const plate = tx.vehicle_details?.license_plate || tx.vehicle_license || 'N/A';
+                  const mat = tx.material_details?.name || tx.material_name || 'General';
+                  const sup = tx.supplier_details?.name || tx.supplier_name || 'Direct';
+                  const netKg = tx.net_weight ? Number(tx.net_weight).toLocaleString() : '-';
+                  const isSelected = selectedIds.includes(t.id);
+                  const isDup = (t.print_count ?? 1) > 1;
+
+                  return (
+                    <tr
+                      key={t.id}
+                      onClick={() => handleOpenDetail(t)}
+                      className={`hover:bg-zinc-50/80 cursor-pointer transition-colors ${
+                        selectedTicket?.id === t.id ? 'bg-zinc-100/60' : ''
+                      }`}
+                    >
+                      <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
+                        <button
+                          type="button"
+                          onClick={() => handleToggleSelect(t.id)}
+                          className="text-zinc-400 hover:text-zinc-700"
+                        >
+                          {isSelected ? (
+                            <CheckSquare className="w-4 h-4 text-zinc-900" />
+                          ) : (
+                            <Square className="w-4 h-4" />
+                          )}
+                        </button>
+                      </td>
+                      <td className="px-4 py-3 font-mono font-bold text-zinc-900 flex items-center gap-1.5">
+                        <FileText className="w-3.5 h-3.5 text-zinc-400" />
+                        <span>{t.ticket_number}</span>
+                      </td>
+                      <td className="px-4 py-3 font-mono font-bold text-zinc-900">{plate}</td>
+                      <td className="px-4 py-3 font-semibold text-zinc-800">{mat}</td>
+                      <td className="px-4 py-3 text-zinc-600 truncate max-w-[140px]">{sup}</td>
+                      <td className="px-4 py-3 text-right font-mono font-black text-zinc-900">{netKg} kg</td>
+                      <td className="px-4 py-3 text-center">
+                        <span
+                          className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-mono font-bold ${
+                            isDup
+                              ? 'bg-amber-50 text-amber-700 border border-amber-200'
+                              : 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                          }`}
+                        >
+                          {isDup ? `Reprint #${t.print_count}` : 'Original'}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3 text-zinc-500 font-mono text-[11px]">
+                        {new Date(t.generated_datetime).toLocaleDateString()} {new Date(t.generated_datetime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                      </td>
+                      <td className="px-4 py-3 text-right" onClick={(e) => e.stopPropagation()}>
+                        <div className="flex items-center justify-end gap-1">
+                          <button
+                            onClick={() => handleOpenDetail(t)}
+                            className="p-1 rounded hover:bg-zinc-200/60 text-zinc-500 hover:text-zinc-900"
+                            title="Inspect Certificate"
+                          >
+                            <Eye className="w-4 h-4" />
+                          </button>
+                          <button
+                            onClick={() => {
+                              setSelectedTicket(t);
+                              setIsPanelOpen(true);
+                              setTimeout(handlePrintSelected, 100);
+                            }}
+                            className="p-1 rounded hover:bg-zinc-200/60 text-zinc-500 hover:text-zinc-900"
+                            title="Quick Print"
+                          >
+                            <Printer className="w-4 h-4" />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {/* UNIVERSAL REUSABLE SLIDE-OUT DETAIL PANEL FOR TICKET CERTIFICATE */}
+      <DetailPanel
+        isOpen={isPanelOpen}
+        onClose={() => setIsPanelOpen(false)}
+        title={selectedTicket ? selectedTicket.ticket_number : 'Ticket Certificate'}
+        subtitle={currentTx.vehicle_details?.license_plate ? `Vehicle ${currentTx.vehicle_details.license_plate} • Certified Certificate` : 'Weighbridge Official Slip'}
+        badge={
+          isReprint ? (
+            <span className="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-amber-50 text-amber-700 border border-amber-200">
+              Duplicate #{printCount}
+            </span>
+          ) : (
+            <span className="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
+              Official Original
+            </span>
+          )
+        }
+        width="max-w-2xl"
+        headerActions={
+          <div className="flex items-center gap-1.5 mr-2">
             {/* Format Switcher */}
-            <div className="flex border border-zinc-200 rounded-lg p-0.5 bg-zinc-100 text-xs font-semibold mr-1">
+            <div className="flex border border-zinc-200 rounded-lg p-0.5 bg-zinc-100 text-xs font-semibold">
               <button
                 type="button"
                 onClick={() => setTicketFormat('A4')}
-                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md transition-all ${
+                className={`flex items-center gap-1 px-2.5 py-1 rounded transition-all text-[11px] ${
                   ticketFormat === 'A4' ? 'bg-white text-zinc-900 shadow-sm' : 'text-zinc-500'
                 }`}
               >
-                <FileCheck className="w-3.5 h-3.5" />
-                <span>Standard A4</span>
+                <FileCheck className="w-3 h-3" />
+                <span>A4</span>
               </button>
               <button
                 type="button"
                 onClick={() => setTicketFormat('THERMAL')}
-                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md transition-all ${
+                className={`flex items-center gap-1 px-2.5 py-1 rounded transition-all text-[11px] ${
                   ticketFormat === 'THERMAL' ? 'bg-white text-zinc-900 shadow-sm' : 'text-zinc-500'
                 }`}
               >
-                <Receipt className="w-3.5 h-3.5" />
-                <span>80mm Thermal</span>
+                <Receipt className="w-3 h-3" />
+                <span>Thermal</span>
               </button>
             </div>
 
             <button
               onClick={handleEmailDispatch}
-              className="flex items-center gap-1.5 px-3 py-2 rounded-lg border border-zinc-200 bg-white hover:bg-zinc-100 text-xs font-semibold text-zinc-700 transition-colors"
-              title="Send via Email"
+              className="p-1.5 rounded-lg border border-zinc-200 bg-white hover:bg-zinc-100 text-zinc-700 text-xs font-semibold"
+              title="Send Email"
             >
               <Mail className="w-3.5 h-3.5" />
-              <span>Email</span>
             </button>
-
             <button
-              onClick={handlePrint}
-              disabled={reprinting}
-              className="flex items-center gap-2 px-4 py-2 rounded-lg bg-zinc-900 hover:bg-black text-xs font-semibold text-white transition-all shadow-sm"
+              onClick={handleDownloadPdf}
+              className="p-1.5 rounded-lg border border-zinc-200 bg-white hover:bg-zinc-100 text-zinc-700 text-xs font-semibold"
+              title="Download PDF"
             >
-              <Printer className="w-4 h-4" />
-              <span>{isReprint ? 'Print Duplicate Slip' : 'Print Official Slip'}</span>
+              <Download className="w-3.5 h-3.5" />
+            </button>
+            <button
+              onClick={handlePrintSelected}
+              disabled={reprinting}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-zinc-900 hover:bg-black text-white text-xs font-semibold shadow-sm"
+            >
+              <Printer className="w-3.5 h-3.5" />
+              <span>{isReprint ? 'Print Duplicate' : 'Print Slip'}</span>
             </button>
           </div>
-        )}
-      </div>
-
-      {/* Search Bar */}
-      <div className="flex gap-2 max-w-md print:hidden">
-        <div className="relative flex-1">
-          <Search className="w-4 h-4 text-zinc-400 absolute left-3.5 top-2.5" />
-          <input
-            type="text"
-            placeholder="Enter ticket number (e.g. TKT-2026-...) or ID..."
-            value={ticketQuery}
-            onChange={(e) => setTicketQuery(e.target.value)}
-            onKeyDown={(e) => e.key === 'Enter' && fetchTicket(ticketQuery)}
-            className="w-full bg-white border border-zinc-200 rounded-lg pl-10 pr-4 py-2 text-xs text-zinc-900 placeholder-zinc-400 focus:outline-none focus:border-zinc-800"
-          />
-        </div>
-        <button
-          onClick={() => fetchTicket(ticketQuery)}
-          className="px-4 py-2 rounded-lg bg-zinc-900 hover:bg-black text-xs font-semibold text-white transition-colors"
-        >
-          {loading ? 'Searching...' : 'Search'}
-        </button>
-      </div>
-
-      {error && (
-        <div className="p-3 bg-zinc-100 border border-zinc-300 rounded-lg text-zinc-800 text-xs print:hidden">
-          {error}
-        </div>
-      )}
-
-      {/* TICKET DISPLAY CONTAINER */}
-      {ticketData ? (
-        ticketFormat === 'A4' ? (
-          /* ================= STANDARD A4 CERTIFICATE ================= */
-          <div className="relative max-w-2xl mx-auto bg-white text-zinc-900 p-8 rounded-2xl shadow-sm border border-zinc-200 print:shadow-none print:border-none print:m-0 print:p-4 overflow-hidden">
-            {/* Watermark for reprints */}
-            {isReprint && (
-              <div className="absolute inset-0 pointer-events-none flex items-center justify-center opacity-10 rotate-[-30deg] select-none">
-                <span className="text-7xl font-black font-mono tracking-widest text-zinc-900">
-                  DUPLICATE #{printCount}
-                </span>
-              </div>
-            )}
-
-            {/* Header */}
-            <div className="flex items-center justify-between border-b-2 border-zinc-900 pb-4 mb-6">
-              <div className="flex items-center gap-3">
-                <div className="p-2.5 rounded-lg bg-zinc-900 text-white">
-                  <Scale className="w-6 h-6" />
-                </div>
-                <div>
-                  <h1 className="font-black text-lg tracking-wider text-zinc-900 uppercase">
-                    Smart-Weigh System
-                  </h1>
-                  <p className="text-xs text-zinc-600 font-medium">Official Weighbridge Weight Certificate</p>
-                </div>
-              </div>
-              <div className="text-right">
-                <div className="text-sm font-mono font-bold text-zinc-900">
-                  {ticketObj?.ticket_number || ticketData.ticket_number || `TKT-#${ticketData.id}`}
-                </div>
-                <div className="text-[10px] text-zinc-500 font-mono">
-                  Issued: {new Date().toLocaleDateString()} • Print #{printCount}
-                </div>
-              </div>
-            </div>
-
-            {/* Metadata Grid */}
-            <div className="grid grid-cols-2 gap-6 text-xs mb-8">
-              <div className="space-y-3">
-                <div>
-                  <span className="block text-[10px] uppercase font-bold text-zinc-400">Vehicle Plate</span>
-                  <span className="font-mono text-base font-bold text-zinc-900">
-                    {typeof ticketData.vehicle === 'object' ? ticketData.vehicle?.license_plate : ticketData.vehicle_license || ticketData.vehicle}
-                  </span>
-                </div>
-                <div>
-                  <span className="block text-[10px] uppercase font-bold text-zinc-400">Driver</span>
-                  <span className="font-semibold text-zinc-800">
-                    {typeof ticketData.driver === 'object' ? ticketData.driver?.name : ticketData.driver_name || 'Standard Carrier Driver'}
-                  </span>
-                </div>
-                <div>
-                  <span className="block text-[10px] uppercase font-bold text-zinc-400">Supplier / Vendor</span>
-                  <span className="font-semibold text-zinc-800">
-                    {typeof ticketData.supplier === 'object' ? ticketData.supplier?.name : ticketData.supplier_name || 'Direct Commercial'}
-                  </span>
-                </div>
-              </div>
-
-              <div className="space-y-3 text-right">
-                <div>
-                  <span className="block text-[10px] uppercase font-bold text-zinc-400">Material</span>
-                  <span className="font-bold text-zinc-900">
-                    {typeof ticketData.material === 'object' ? ticketData.material?.name : ticketData.material_name || ticketData.material}
-                  </span>
-                </div>
-                <div>
-                  <span className="block text-[10px] uppercase font-bold text-zinc-400">1st Weighing Time</span>
-                  <span className="font-mono text-zinc-700">
-                    {ticketData.first_weighing_datetime ? new Date(ticketData.first_weighing_datetime).toLocaleString() : '-'}
-                  </span>
-                </div>
-                <div>
-                  <span className="block text-[10px] uppercase font-bold text-zinc-400">2nd Weighing Time</span>
-                  <span className="font-mono text-zinc-700">
-                    {ticketData.second_weighing_datetime ? new Date(ticketData.second_weighing_datetime).toLocaleString() : '-'}
-                  </span>
-                </div>
-              </div>
-            </div>
-
-            {/* Weight Breakdown */}
-            <div className="border border-zinc-200 rounded-xl overflow-hidden mb-6">
-              <table className="w-full text-xs">
-                <thead className="bg-zinc-50 font-bold text-zinc-600 border-b border-zinc-200">
-                  <tr>
-                    <th className="px-4 py-2.5 text-left uppercase text-[10px]">Weight Parameter</th>
-                    <th className="px-4 py-2.5 text-right uppercase text-[10px]">Reading</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-zinc-200 font-mono">
-                  <tr>
-                    <td className="px-4 py-2.5 text-zinc-700">Gross Weight (Loaded)</td>
-                    <td className="px-4 py-2.5 text-right font-bold text-zinc-900">
-                      {ticketData.gross_weight ? `${Number(ticketData.gross_weight).toLocaleString()} kg` : '-'}
-                    </td>
-                  </tr>
-                  <tr>
-                    <td className="px-4 py-2.5 text-zinc-700">Tare Weight (Empty)</td>
-                    <td className="px-4 py-2.5 text-right font-bold text-zinc-900">
-                      {ticketData.tare_weight ? `${Number(ticketData.tare_weight).toLocaleString()} kg` : '-'}
-                    </td>
-                  </tr>
-                  <tr className="bg-zinc-100 font-bold text-zinc-900 text-sm">
-                    <td className="px-4 py-3 font-sans">TOTAL CERTIFIED NET WEIGHT</td>
-                    <td className="px-4 py-3 text-right text-base text-zinc-900">
-                      {ticketData.net_weight ? `${Number(ticketData.net_weight).toLocaleString()} kg` : '-'}
-                    </td>
-                  </tr>
-                </tbody>
-              </table>
-            </div>
-
-            {/* Remarks / Lab Quality Note */}
-            {ticketData.remarks && (
-              <div className="mb-6 p-3 bg-zinc-50 border border-zinc-200 rounded-lg text-xs font-mono text-zinc-700">
-                <span className="font-bold font-sans text-zinc-900 block mb-0.5 text-[11px]">Audit / Lab Notes:</span>
-                {ticketData.remarks}
-              </div>
-            )}
-
-            {/* Signatures & QR Code Section */}
-            <div className="grid grid-cols-3 gap-6 pt-6 border-t border-dashed border-zinc-300 items-end text-xs">
-              {/* Operator Signature */}
-              <div className="text-center">
-                <div
-                  onClick={() => {
-                    setActiveSigner('operator');
-                    setShowSigModal(true);
-                  }}
-                  className="h-16 border-b border-zinc-400 flex items-center justify-center cursor-pointer hover:bg-zinc-50 transition-colors"
-                  title="Click to sign digitally"
-                >
-                  {operatorSig ? (
-                    <img src={operatorSig} alt="Operator Sig" className="max-h-14 object-contain" />
-                  ) : (
-                    <span className="text-[10px] text-zinc-400 flex items-center gap-1 print:hidden">
-                      <PenTool className="w-3 h-3" /> Click to Sign
-                    </span>
-                  )}
-                </div>
-                <p className="mt-1 font-semibold text-zinc-700 text-[11px]">Weighbridge Operator</p>
-                <p className="text-[10px] text-zinc-500 font-mono">
-                  {ticketData.operator_name || 'System Operator'}
-                </p>
-              </div>
-
-              {/* Security QR Code */}
-              <div className="flex flex-col items-center justify-center text-center">
-                <div className="p-2 border border-zinc-200 rounded-lg bg-zinc-50">
-                  <div className="w-16 h-16 bg-zinc-900 flex items-center justify-center text-white rounded">
-                    <QrCode className="w-10 h-10" />
+        }
+      >
+        {selectedTicket && (
+          <div className="space-y-6">
+            {/* FORMAT DISPLAY CONTAINER */}
+            {ticketFormat === 'A4' ? (
+              /* A4 CERTIFICATE IN PANEL */
+              <div className="bg-white text-zinc-900 p-6 rounded-xl border border-zinc-200 shadow-sm space-y-6">
+                <div className="flex items-center justify-between border-b-2 border-zinc-900 pb-3">
+                  <div className="flex items-center gap-2.5">
+                    <div className="p-2 rounded-lg bg-zinc-900 text-white">
+                      <Scale className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <h3 className="font-black text-sm tracking-wide uppercase text-zinc-900">SMART-WEIGH SYSTEM</h3>
+                      <p className="text-[10px] text-zinc-500">Official Certified Weighbridge Certificate</p>
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    <div className="text-xs font-mono font-bold text-zinc-900">{selectedTicket.ticket_number}</div>
+                    <div className="text-[9px] text-zinc-400 font-mono">
+                      Issued: {new Date(selectedTicket.generated_datetime).toLocaleDateString()}
+                    </div>
                   </div>
                 </div>
-                <span className="text-[9px] text-zinc-500 font-mono mt-1">SECURE VERIFY</span>
-              </div>
 
-              {/* Driver Signature */}
-              <div className="text-center">
-                <div
-                  onClick={() => {
-                    setActiveSigner('driver');
-                    setShowSigModal(true);
-                  }}
-                  className="h-16 border-b border-zinc-400 flex items-center justify-center cursor-pointer hover:bg-zinc-50 transition-colors"
-                  title="Click to sign digitally"
-                >
-                  {driverSig ? (
-                    <img src={driverSig} alt="Driver Sig" className="max-h-14 object-contain" />
-                  ) : (
-                    <span className="text-[10px] text-zinc-400 flex items-center gap-1 print:hidden">
-                      <PenTool className="w-3 h-3" /> Click to Sign
-                    </span>
-                  )}
+                {/* Metadata Grid */}
+                <div className="grid grid-cols-2 gap-4 text-xs">
+                  <div className="space-y-2">
+                    <div>
+                      <span className="block text-[9px] uppercase font-bold text-zinc-400">Vehicle License</span>
+                      <span className="font-mono text-sm font-bold text-zinc-900">
+                        {currentTx.vehicle_details?.license_plate || currentTx.vehicle_license || 'N/A'}
+                      </span>
+                    </div>
+                    <div>
+                      <span className="block text-[9px] uppercase font-bold text-zinc-400">Driver</span>
+                      <span className="font-semibold text-zinc-800">
+                        {currentTx.driver_details?.name || currentTx.driver_name || 'Standard Driver'}
+                      </span>
+                    </div>
+                    <div>
+                      <span className="block text-[9px] uppercase font-bold text-zinc-400">Supplier / Vendor</span>
+                      <span className="font-semibold text-zinc-800">
+                        {currentTx.supplier_details?.name || currentTx.supplier_name || 'Direct Commercial'}
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="space-y-2 text-right">
+                    <div>
+                      <span className="block text-[9px] uppercase font-bold text-zinc-400">Material</span>
+                      <span className="font-bold text-zinc-900">
+                        {currentTx.material_details?.name || currentTx.material_name || 'Aggregate'}
+                      </span>
+                    </div>
+                    <div>
+                      <span className="block text-[9px] uppercase font-bold text-zinc-400">1st Weighing Time</span>
+                      <span className="font-mono text-zinc-700 text-[11px]">
+                        {currentTx.first_weighing_datetime ? new Date(currentTx.first_weighing_datetime).toLocaleString() : '-'}
+                      </span>
+                    </div>
+                    <div>
+                      <span className="block text-[9px] uppercase font-bold text-zinc-400">2nd Weighing Time</span>
+                      <span className="font-mono text-zinc-700 text-[11px]">
+                        {currentTx.second_weighing_datetime ? new Date(currentTx.second_weighing_datetime).toLocaleString() : '-'}
+                      </span>
+                    </div>
+                  </div>
                 </div>
-                <p className="mt-1 font-semibold text-zinc-700 text-[11px]">Vehicle Driver</p>
-                <p className="text-[10px] text-zinc-500 font-mono">
-                  {typeof ticketData.driver === 'object' ? ticketData.driver?.name : ticketData.driver_name || 'Driver Signature'}
-                </p>
+
+                {/* Weight Breakdown */}
+                <div className="border border-zinc-200 rounded-lg overflow-hidden text-xs">
+                  <table className="w-full">
+                    <thead className="bg-zinc-50 border-b border-zinc-200 uppercase text-[9px] font-mono text-zinc-500">
+                      <tr>
+                        <th className="px-3 py-2 text-left">Classification</th>
+                        <th className="px-3 py-2 text-right">Mass (kg)</th>
+                        <th className="px-3 py-2 text-right">Mass (Metric Tonnes)</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-zinc-100 font-mono">
+                      <tr>
+                        <td className="px-3 py-2 font-semibold text-zinc-700">Gross Weight (Loaded)</td>
+                        <td className="px-3 py-2 text-right font-bold text-zinc-900">
+                          {currentTx.gross_weight ? Number(currentTx.gross_weight).toLocaleString() : '-'}
+                        </td>
+                        <td className="px-3 py-2 text-right text-zinc-500">
+                          {currentTx.gross_weight ? (Number(currentTx.gross_weight) / 1000).toFixed(2) : '-'}
+                        </td>
+                      </tr>
+                      <tr>
+                        <td className="px-3 py-2 font-semibold text-zinc-700">Tare Weight (Empty)</td>
+                        <td className="px-3 py-2 text-right font-bold text-zinc-900">
+                          {currentTx.tare_weight ? Number(currentTx.tare_weight).toLocaleString() : '-'}
+                        </td>
+                        <td className="px-3 py-2 text-right text-zinc-500">
+                          {currentTx.tare_weight ? (Number(currentTx.tare_weight) / 1000).toFixed(2) : '-'}
+                        </td>
+                      </tr>
+                      <tr className="bg-zinc-900 text-white font-bold">
+                        <td className="px-3 py-2.5">CERTIFIED NET PAYABLE WEIGHT</td>
+                        <td className="px-3 py-2.5 text-right text-sm">
+                          {currentTx.net_weight ? Number(currentTx.net_weight).toLocaleString() : '-'} kg
+                        </td>
+                        <td className="px-3 py-2.5 text-right text-sm">
+                          {currentTx.net_weight ? (Number(currentTx.net_weight) / 1000).toFixed(2) : '-'} t
+                        </td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+
+                {/* Signatures & Security QR */}
+                <div className="grid grid-cols-3 gap-3 pt-3 border-t border-zinc-100 items-center text-center text-xs">
+                  <div>
+                    <div
+                      onClick={() => {
+                        setActiveSigner('operator');
+                        setShowSigModal(true);
+                      }}
+                      className="h-12 border-b border-zinc-400 flex items-center justify-center cursor-pointer hover:bg-zinc-50 transition-colors"
+                    >
+                      {operatorSig ? (
+                        <img src={operatorSig} alt="Operator Sig" className="max-h-10 object-contain" />
+                      ) : (
+                        <span className="text-[10px] text-zinc-400 flex items-center gap-1">
+                          <PenTool className="w-3 h-3" /> Sign
+                        </span>
+                      )}
+                    </div>
+                    <p className="mt-1 font-semibold text-zinc-700 text-[10px]">Operator: {selectedTicket.printed_by_name || 'System'}</p>
+                  </div>
+
+                  <div className="flex flex-col items-center justify-center">
+                    <div className="p-1 border border-zinc-200 rounded-lg bg-zinc-50">
+                      <div className="w-12 h-12 bg-zinc-900 flex items-center justify-center text-white rounded">
+                        <QrCode className="w-8 h-8" />
+                      </div>
+                    </div>
+                    <span className="text-[8px] font-mono text-zinc-400 mt-1">VERIFIED</span>
+                  </div>
+
+                  <div>
+                    <div
+                      onClick={() => {
+                        setActiveSigner('driver');
+                        setShowSigModal(true);
+                      }}
+                      className="h-12 border-b border-zinc-400 flex items-center justify-center cursor-pointer hover:bg-zinc-50 transition-colors"
+                    >
+                      {driverSig ? (
+                        <img src={driverSig} alt="Driver Sig" className="max-h-10 object-contain" />
+                      ) : (
+                        <span className="text-[10px] text-zinc-400 flex items-center gap-1">
+                          <PenTool className="w-3 h-3" /> Sign
+                        </span>
+                      )}
+                    </div>
+                    <p className="mt-1 font-semibold text-zinc-700 text-[10px]">Driver Signature</p>
+                  </div>
+                </div>
               </div>
-            </div>
-          </div>
-        ) : (
-          /* ================= 80MM THERMAL RECEIPT FORMAT ================= */
-          <div className="relative max-w-xs mx-auto bg-white text-zinc-900 p-5 rounded-2xl shadow-sm border border-zinc-200 font-mono text-xs print:shadow-none print:border-none print:m-0 print:p-2">
-            {isReprint && (
-              <div className="text-center py-1 bg-zinc-100 border border-zinc-300 rounded font-bold text-[10px] uppercase tracking-wider mb-3">
-                *** DUPLICATE REPRINT #{printCount} ***
+            ) : (
+              /* THERMAL RECEIPT FORMAT IN PANEL */
+              <div className="max-w-xs mx-auto bg-white text-zinc-900 p-5 rounded-xl border border-zinc-200 font-mono text-xs space-y-3">
+                <div className="text-center pb-2 border-b border-dashed border-zinc-300">
+                  <h4 className="font-black text-xs uppercase">SMART-WEIGH SYSTEM</h4>
+                  <p className="text-[10px] text-zinc-500">WEIGHBRIDGE CERTIFICATE</p>
+                  <p className="font-bold text-xs mt-0.5">{selectedTicket.ticket_number}</p>
+                  <p className="text-[9px] text-zinc-400">{new Date(selectedTicket.generated_datetime).toLocaleString()}</p>
+                </div>
+
+                <div className="space-y-1 text-[11px] pb-2 border-b border-dashed border-zinc-300">
+                  <div className="flex justify-between">
+                    <span className="text-zinc-500">PLATE:</span>
+                    <span className="font-bold">{currentTx.vehicle_details?.license_plate || currentTx.vehicle_license || 'N/A'}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-zinc-500">MATERIAL:</span>
+                    <span>{currentTx.material_details?.name || currentTx.material_name || 'Aggregate'}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-zinc-500">SUPPLIER:</span>
+                    <span>{currentTx.supplier_details?.name || currentTx.supplier_name || 'Direct'}</span>
+                  </div>
+                </div>
+
+                <div className="space-y-1 text-xs pb-2 border-b-2 border-zinc-900">
+                  <div className="flex justify-between">
+                    <span>GROSS:</span>
+                    <span>{currentTx.gross_weight ? Number(currentTx.gross_weight).toLocaleString() : '-'} kg</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span>TARE:</span>
+                    <span>{currentTx.tare_weight ? Number(currentTx.tare_weight).toLocaleString() : '-'} kg</span>
+                  </div>
+                  <div className="flex justify-between font-black text-sm pt-1 border-t border-zinc-200">
+                    <span>NET:</span>
+                    <span>{currentTx.net_weight ? Number(currentTx.net_weight).toLocaleString() : '-'} kg</span>
+                  </div>
+                </div>
               </div>
             )}
-
-            <div className="text-center pb-3 border-b border-dashed border-zinc-300">
-              <h2 className="font-black text-sm uppercase tracking-wide">SMART-WEIGH SYSTEM</h2>
-              <p className="text-[10px] text-zinc-500">WEIGHBRIDGE CERTIFICATE</p>
-              <p className="font-bold text-xs mt-1">
-                {ticketObj?.ticket_number || ticketData.ticket_number || `TX-${ticketData.id}`}
-              </p>
-              <p className="text-[10px] text-zinc-500">{new Date().toLocaleString()}</p>
-            </div>
-
-            <div className="py-3 space-y-1.5 border-b border-dashed border-zinc-300 text-[11px]">
-              <div className="flex justify-between">
-                <span className="text-zinc-500">PLATE:</span>
-                <span className="font-bold">
-                  {typeof ticketData.vehicle === 'object' ? ticketData.vehicle?.license_plate : ticketData.vehicle_license || ticketData.vehicle}
-                </span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-zinc-500">MATERIAL:</span>
-                <span>{typeof ticketData.material === 'object' ? ticketData.material?.name : ticketData.material_name || ticketData.material}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-zinc-500">SUPPLIER:</span>
-                <span>{typeof ticketData.supplier === 'object' ? ticketData.supplier?.name : ticketData.supplier_name || 'Direct'}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-zinc-500">OPERATOR:</span>
-                <span>{ticketData.operator_name || 'Scale 01'}</span>
-              </div>
-            </div>
-
-            <div className="py-3 space-y-1 border-b-2 border-zinc-900 text-xs">
-              <div className="flex justify-between">
-                <span>GROSS:</span>
-                <span className="font-bold">{ticketData.gross_weight ? Number(ticketData.gross_weight).toLocaleString() : '-'} kg</span>
-              </div>
-              <div className="flex justify-between">
-                <span>TARE:</span>
-                <span className="font-bold">{ticketData.tare_weight ? Number(ticketData.tare_weight).toLocaleString() : '-'} kg</span>
-              </div>
-              <div className="flex justify-between text-sm font-black pt-1 border-t border-zinc-200">
-                <span>NET WT:</span>
-                <span>{ticketData.net_weight ? Number(ticketData.net_weight).toLocaleString() : '-'} kg</span>
-              </div>
-            </div>
-
-            {ticketData.remarks && (
-              <div className="py-2 text-[10px] text-zinc-600 border-b border-dashed border-zinc-300">
-                NOTE: {ticketData.remarks}
-              </div>
-            )}
-
-            <div className="py-4 space-y-6 text-center text-[10px]">
-              <div>
-                {operatorSig && <img src={operatorSig} alt="Sig" className="h-8 mx-auto object-contain" />}
-                <div className="border-t border-zinc-400 pt-0.5">Operator Signature</div>
-              </div>
-              <div>
-                {driverSig && <img src={driverSig} alt="Sig" className="h-8 mx-auto object-contain" />}
-                <div className="border-t border-zinc-400 pt-0.5">Driver Signature</div>
-              </div>
-            </div>
-
-            <div className="text-center pt-2 text-[9px] text-zinc-400 border-t border-dashed border-zinc-300">
-              * VALID ONLY WITH SIGNATURE *
-            </div>
           </div>
-        )
-      ) : (
-        <div className="p-12 text-center rounded-xl bg-white border border-zinc-200 text-zinc-500 text-xs">
-          Search for a ticket number or navigate from the Weighbridge table to inspect and print slips.
-        </div>
-      )}
+        )}
+      </DetailPanel>
 
       {/* DIGITAL SIGNATURE CAPTURE MODAL */}
       {showSigModal && (
@@ -535,7 +778,6 @@ function TicketContent() {
               </button>
             </div>
 
-            {/* Canvas Area */}
             <div className="border border-zinc-300 rounded-lg overflow-hidden bg-white">
               <canvas
                 ref={canvasRef}
@@ -588,7 +830,7 @@ function TicketContent() {
 
 export default function TicketsPage() {
   return (
-    <Suspense fallback={<div className="text-xs text-zinc-400">Loading tickets...</div>}>
+    <Suspense fallback={<div className="text-xs text-zinc-400 p-8 text-center">Loading tickets console...</div>}>
       <TicketContent />
     </Suspense>
   );

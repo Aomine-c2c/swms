@@ -91,7 +91,7 @@ export default function AuditTrailPage() {
   });
 
   return (
-    <RouteGuard roles={['Supervisor', 'Administrator']}>
+    <RouteGuard roles={['Supervisor', 'Manager', 'Administrator']}>
       <div className="space-y-6">
         
         {/* Header Bar */}

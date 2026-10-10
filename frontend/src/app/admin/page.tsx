@@ -142,7 +142,7 @@ export default function AdminPage() {
   };
 
   return (
-    <RouteGuard roles={['Administrator']}>
+    <RouteGuard roles={['Manager', 'Administrator']}>
       <div className="space-y-6">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
@@ -186,9 +186,24 @@ export default function AdminPage() {
                         <td className="px-4 py-3">{[u.first_name, u.last_name].filter(Boolean).join(' ') || '-'}</td>
                         <td className="px-4 py-3 text-zinc-500 font-mono text-[11px]">{u.email || '-'}</td>
                         <td className="px-4 py-3">
-                          <span className="inline-flex px-2 py-0.5 rounded text-[10px] font-semibold bg-zinc-100 text-zinc-800 border border-zinc-200">
-                            {u.role_details?.name || (u.is_superuser ? 'Administrator' : 'Unassigned')}
-                          </span>
+                          <div className="group relative inline-block">
+                            <span className="inline-flex px-2 py-0.5 rounded text-[10px] font-semibold bg-zinc-100 text-zinc-800 border border-zinc-200 cursor-help">
+                              {u.role_details?.name || (u.is_superuser ? 'Administrator' : 'Unassigned')}
+                            </span>
+                            {/* Hover permission matrix popover */}
+                            <div className="hidden group-hover:block absolute left-0 bottom-full mb-1 z-30 w-56 p-2.5 bg-zinc-900 text-white rounded-lg shadow-xl text-[10px] space-y-1">
+                              <p className="font-bold text-zinc-200 border-b border-zinc-800 pb-1">
+                                {u.role_details?.name || (u.is_superuser ? 'Administrator (Full Access)' : 'Unassigned')}
+                              </p>
+                              {u.is_superuser || u.role_details?.name === 'Administrator' ? (
+                                <p className="text-emerald-400">Full unconstrained system rights, supervisor override, configuration edit & user audit management.</p>
+                              ) : u.role_details?.name === 'Supervisor' ? (
+                                <p className="text-zinc-300">Dual-PIN exception authorization, overweight override, void tickets, audit reports.</p>
+                              ) : (
+                                <p className="text-zinc-300">Fast 1st/2nd weighment capture, driver/vehicle registration, slip print.</p>
+                              )}
+                            </div>
+                          </div>
                         </td>
                         <td className="px-4 py-3">
                           <span className={`inline-flex items-center gap-1 text-[11px] font-semibold ${isActive ? 'text-zinc-800' : 'text-zinc-400'}`}>

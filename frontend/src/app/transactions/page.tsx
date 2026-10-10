@@ -20,6 +20,7 @@ import { WeighingTransaction, Vehicle, Driver, Supplier, Material } from '@/type
 import { useAuth } from '@/lib/auth-context';
 import { useScale } from '@/lib/scale-context';
 import { SearchableSelect } from '@/components/common/SearchableSelect';
+import { RouteGuard } from '@/components/auth/RouteGuard';
 
 export default function TransactionsPage() {
   const { user } = useAuth();
@@ -370,7 +371,8 @@ export default function TransactionsPage() {
   });
 
   return (
-    <div className="space-y-6">
+    <RouteGuard roles={['Operator', 'Weighbridge Operator', 'Administrator']}>
+      <div className="space-y-6">
       {/* Page Title */}
       <div className="flex items-center justify-between">
         <div>
@@ -455,9 +457,11 @@ export default function TransactionsPage() {
               <button
                 type="button"
                 onClick={zeroScale}
-                className="py-2 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-300 text-xs font-semibold transition-colors"
+                className="py-2 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-300 text-xs font-semibold transition-colors flex items-center justify-center gap-1.5"
+                title="Zero scale (F2)"
               >
-                Zero Scale (Tare 0)
+                <span>Zero Scale</span>
+                <kbd className="px-1 py-0.2 rounded bg-zinc-900 border border-zinc-700 text-[10px] text-zinc-400 font-mono">F2</kbd>
               </button>
             </div>
           </div>
@@ -590,26 +594,29 @@ export default function TransactionsPage() {
                   options={suppliers.map((s) => ({
                     value: s.id.toString(),
                     label: s.name,
-                    sublabel: s.phone_number || undefined,
+                    sublabel: s.phone || s.contact_person || undefined,
                   }))}
                 />
               </div>
 
               {/* Manual Override Flag */}
               <div className="p-3 bg-zinc-50 border border-zinc-200 rounded-lg space-y-2">
-                <label className="flex items-center gap-2 cursor-pointer text-zinc-800 font-medium">
-                  <input
-                    type="checkbox"
-                    checked={formIsManual}
-                    onChange={(e) => {
-                      setFormIsManual(e.target.checked);
-                      if (e.target.checked && !formManualWeight && liveWeight > 0) {
-                        setFormManualWeight(liveWeight.toString());
-                      }
-                    }}
-                    className="rounded text-zinc-900 focus:ring-0"
-                  />
-                  <span>Manual Entry Override</span>
+                <label className="flex items-center justify-between cursor-pointer text-zinc-800 font-medium">
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="checkbox"
+                      checked={formIsManual}
+                      onChange={(e) => {
+                        setFormIsManual(e.target.checked);
+                        if (e.target.checked && !formManualWeight && liveWeight > 0) {
+                          setFormManualWeight(liveWeight.toString());
+                        }
+                      }}
+                      className="rounded text-zinc-900 focus:ring-0"
+                    />
+                    <span>Manual Entry Override</span>
+                  </div>
+                  <kbd className="px-1 py-0.2 rounded bg-zinc-100 border border-zinc-200 text-[10px] text-zinc-400 font-mono">F4</kbd>
                 </label>
                 {formIsManual && (
                   <div className="space-y-2 pt-1 border-t border-zinc-200">
@@ -649,7 +656,8 @@ export default function TransactionsPage() {
                 disabled={submitting}
                 className="w-full py-2.5 px-4 rounded-lg bg-zinc-900 hover:bg-black text-white font-semibold text-xs flex items-center justify-center gap-2 shadow-sm transition-all disabled:opacity-50"
               >
-                {submitting ? 'Recording Weighing...' : 'Record 1st Weighing to Queue'}
+                <span>{submitting ? 'Recording Weighing...' : 'Record 1st Weighing to Queue'}</span>
+                <kbd className="px-1.5 py-0.5 rounded bg-zinc-800 text-[10px] text-zinc-300 font-mono">Enter</kbd>
                 <ArrowRight className="w-3.5 h-3.5" />
               </button>
             </form>
@@ -1235,6 +1243,7 @@ export default function TransactionsPage() {
           </div>
         </div>
       )}
-    </div>
+      </div>
+    </RouteGuard>
   );
 }

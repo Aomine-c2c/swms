@@ -78,7 +78,7 @@ export default function LoginPage() {
                 required
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
-                placeholder="operator1 or admin"
+                placeholder="Enter username"
                 className="w-full bg-zinc-50 border border-zinc-200 rounded-lg pl-9 pr-3 py-2 text-xs text-zinc-900 placeholder-zinc-400 focus:outline-none focus:bg-white focus:border-zinc-800 transition-colors"
               />
             </div>
@@ -116,63 +116,6 @@ export default function LoginPage() {
             )}
           </button>
         </form>
-
-        {/* Preconfigured Demo Accounts */}
-        <div className="mt-5 pt-4 border-t border-zinc-100">
-          <p className="text-[10px] uppercase font-bold text-zinc-400 tracking-wider text-center mb-2.5">
-            Quick-Login Demo Accounts
-          </p>
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-            <button
-              type="button"
-              disabled={loading}
-              onClick={() => {
-                setUsername('operator');
-                setPassword('operator');
-                loginWithCredentials('operator', 'operator');
-              }}
-              className="py-1.5 px-2 rounded-lg border border-zinc-200 bg-zinc-50 hover:bg-zinc-100 text-zinc-800 text-[11px] font-semibold text-center transition-colors disabled:opacity-50"
-            >
-              Operator
-            </button>
-            <button
-              type="button"
-              disabled={loading}
-              onClick={() => {
-                setUsername('supervisor');
-                setPassword('supervisor');
-                loginWithCredentials('supervisor', 'supervisor');
-              }}
-              className="py-1.5 px-2 rounded-lg border border-zinc-200 bg-zinc-50 hover:bg-zinc-100 text-zinc-800 text-[11px] font-semibold text-center transition-colors disabled:opacity-50"
-            >
-              Supervisor
-            </button>
-            <button
-              type="button"
-              disabled={loading}
-              onClick={() => {
-                setUsername('manager');
-                setPassword('manager');
-                loginWithCredentials('manager', 'manager');
-              }}
-              className="py-1.5 px-2 rounded-lg border border-zinc-200 bg-zinc-50 hover:bg-zinc-100 text-zinc-800 text-[11px] font-semibold text-center transition-colors disabled:opacity-50"
-            >
-              Manager
-            </button>
-            <button
-              type="button"
-              disabled={loading}
-              onClick={() => {
-                setUsername('admin');
-                setPassword('admin');
-                loginWithCredentials('admin', 'admin');
-              }}
-              className="py-1.5 px-2 rounded-lg border border-zinc-200 bg-zinc-50 hover:bg-zinc-100 text-zinc-800 text-[11px] font-semibold text-center transition-colors disabled:opacity-50"
-            >
-              Admin
-            </button>
-          </div>
-        </div>
 
         <div className="mt-6 pt-4 border-t border-zinc-100 text-center">
           <p className="text-[10px] text-zinc-400">

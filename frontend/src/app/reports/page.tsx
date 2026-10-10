@@ -148,7 +148,37 @@ export default function ReportsPage() {
             </p>
           </div>
 
-          <div className="flex items-center gap-2 print:hidden">
+          <div className="flex items-center gap-2 print:hidden flex-wrap">
+            {/* Quick Presets */}
+            <div className="hidden md:flex items-center gap-1.5 mr-1 border-r border-zinc-200 pr-2">
+              <span className="text-[10px] font-bold uppercase tracking-wider text-zinc-400">Presets:</span>
+              <button
+                type="button"
+                onClick={() => {
+                  setReportType('shift');
+                  setPeriod('daily');
+                  setDateFrom('');
+                  setDateTo('');
+                }}
+                className="px-2.5 py-1 rounded-md bg-zinc-100 hover:bg-zinc-200 text-[11px] font-bold text-zinc-800 transition-colors"
+              >
+                Today's Shift
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setReportType('tonnage');
+                  setPeriod('weekly');
+                  setGroupBy('material');
+                  setDateFrom('');
+                  setDateTo('');
+                }}
+                className="px-2.5 py-1 rounded-md bg-zinc-100 hover:bg-zinc-200 text-[11px] font-bold text-zinc-800 transition-colors"
+              >
+                Weekly Tonnage
+              </button>
+            </div>
+
             <button
               type="button"
               onClick={handlePrintReport}

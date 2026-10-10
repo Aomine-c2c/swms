@@ -17,12 +17,17 @@ import {
 import { api } from '@/lib/api';
 import { Material } from '@/types';
 import { RouteGuard } from '@/components/auth/RouteGuard';
+import { DetailPanel } from '@/components/common/DetailPanel';
 
 export default function MaterialsPage() {
   const [materials, setMaterials] = useState<Material[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<'All' | 'Active' | 'Inactive'>('All');
+
+  // Slide-out Detail Panel State
+  const [selectedMaterial, setSelectedMaterial] = useState<Material | null>(null);
+  const [isDetailOpen, setIsDetailOpen] = useState(false);
 
   // Modal State
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -132,7 +137,7 @@ export default function MaterialsPage() {
   });
 
   return (
-    <RouteGuard roles={['Administrator', 'Operator', 'Supervisor']}>
+    <RouteGuard roles={['Supervisor', 'Manager', 'Administrator']}>
       <div className="space-y-6">
         
         {/* Header Bar */}
@@ -238,7 +243,16 @@ export default function MaterialsPage() {
                 </tr>
               ) : (
                 filtered.map((m) => (
-                  <tr key={m.id} className="hover:bg-zinc-50/80 transition-colors">
+                  <tr
+                    key={m.id}
+                    onClick={() => {
+                      setSelectedMaterial(m);
+                      setIsDetailOpen(true);
+                    }}
+                    className={`cursor-pointer transition-colors ${
+                      selectedMaterial?.id === m.id ? 'bg-zinc-100/90 font-medium' : 'hover:bg-zinc-50/80'
+                    }`}
+                  >
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-2.5">
                         <div className="w-8 h-8 rounded-lg bg-zinc-100 border border-zinc-200 flex items-center justify-center text-zinc-700">
@@ -271,7 +285,7 @@ export default function MaterialsPage() {
                       )}
                     </td>
 
-                    <td className="px-4 py-3">
+                    <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
                       <button
                         onClick={() => handleToggleStatus(m)}
                         className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded text-[10px] font-semibold border transition-all ${
@@ -290,7 +304,7 @@ export default function MaterialsPage() {
                       </button>
                     </td>
 
-                    <td className="px-4 py-3 text-right">
+                    <td className="px-4 py-3 text-right" onClick={(e) => e.stopPropagation()}>
                       <div className="flex items-center justify-end gap-1.5">
                         <button
                           onClick={() => handleOpenEdit(m)}
@@ -313,6 +327,93 @@ export default function MaterialsPage() {
             </tbody>
           </table>
         </div>
+
+        {/* UNIVERSAL SLIDE-OUT DETAIL PANEL FOR MATERIAL */}
+        <DetailPanel
+          isOpen={isDetailOpen}
+          onClose={() => setIsDetailOpen(false)}
+          title={selectedMaterial?.name || 'Commodity Profile'}
+          subtitle={selectedMaterial ? `MAT-#${selectedMaterial.id.toString().padStart(4, '0')} • Bulk Aggregate Specification` : ''}
+          badge={
+            selectedMaterial && (
+              <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                selectedMaterial.status === 'Active'
+                  ? 'bg-zinc-900 text-white'
+                  : 'bg-zinc-100 text-zinc-500 border border-zinc-300'
+              }`}>
+                {selectedMaterial.status}
+              </span>
+            )
+          }
+          headerActions={
+            selectedMaterial && (
+              <button
+                onClick={() => {
+                  setIsDetailOpen(false);
+                  handleOpenEdit(selectedMaterial);
+                }}
+                className="px-3 py-1.5 rounded-lg bg-zinc-900 hover:bg-black text-white text-xs font-semibold shadow-sm"
+              >
+                Edit Commodity
+              </button>
+            )
+          }
+        >
+          {selectedMaterial && (
+            <div className="space-y-6">
+              {/* Specification Card */}
+              <div className="p-4 rounded-xl bg-zinc-50 border border-zinc-200 space-y-3">
+                <span className="text-[10px] uppercase font-bold text-zinc-400 font-mono">Commodity Breakdown</span>
+                <div className="grid grid-cols-2 gap-3 text-xs">
+                  <div>
+                    <span className="text-[10px] text-zinc-500 block">Unit Tariff</span>
+                    <span className="font-mono font-bold text-zinc-900 text-sm">
+                      {selectedMaterial.unit_price ? `$${Number(selectedMaterial.unit_price).toFixed(2)} / MT` : 'Market Contract'}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-[10px] text-zinc-500 block">Standard Billing Unit</span>
+                    <span className="font-bold text-zinc-900">Metric Tonnes (MT)</span>
+                  </div>
+                </div>
+
+                <div className="pt-2 border-t border-zinc-200">
+                  <span className="text-[10px] text-zinc-500 block">Description & ASTM Specs</span>
+                  <p className="text-xs text-zinc-700 mt-0.5">
+                    {selectedMaterial.description || 'Standard bulk delivery commodity catalogued for terminal weighment operations.'}
+                  </p>
+                </div>
+              </div>
+
+              {/* Fast Operational Controls */}
+              <div className="space-y-2">
+                <span className="text-[10px] uppercase font-bold text-zinc-400 font-mono">Terminal Actions</span>
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    onClick={() => {
+                      handleToggleStatus(selectedMaterial);
+                      setSelectedMaterial((prev) => prev ? { ...prev, status: prev.status === 'Active' ? 'Inactive' : 'Active' } : null);
+                    }}
+                    className="p-3 rounded-xl border border-zinc-200 hover:bg-zinc-50 text-left transition-colors"
+                  >
+                    <span className="text-xs font-bold text-zinc-900 block">
+                      {selectedMaterial.status === 'Active' ? 'Deactivate from Scale' : 'Activate on Scale'}
+                    </span>
+                    <span className="text-[10px] text-zinc-500">Toggle operator availability</span>
+                  </button>
+
+                  <a
+                    href={`/transactions`}
+                    className="p-3 rounded-xl border border-zinc-200 hover:bg-zinc-50 text-left transition-colors block"
+                  >
+                    <span className="text-xs font-bold text-zinc-900 block">Weighbridge Transactions</span>
+                    <span className="text-[10px] text-zinc-500">Filter console by this material</span>
+                  </a>
+                </div>
+              </div>
+            </div>
+          )}
+        </DetailPanel>
 
         {/* Modal: Create / Edit Material */}
         {isModalOpen && (
