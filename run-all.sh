@@ -78,6 +78,40 @@ if [ ! -d "frontend/node_modules" ]; then
     (cd frontend && npm install)
 fi
 
+# 6. Check and build Windows MSI setup if on Windows and not present
+IS_WINDOWS=false
+case "$(uname -s)" in
+    CYGWIN*|MINGW*|MSYS*)
+        IS_WINDOWS=true
+        ;;
+    Linux)
+        # Check if running under WSL
+        if grep -qi microsoft /proc/version 2>/dev/null; then
+            IS_WINDOWS=true
+        fi
+        ;;
+esac
+
+if [ "$IS_WINDOWS" = true ]; then
+    echo "[Windows] Checking for MSI installer package..."
+    MSI_COUNT=$(find frontend/src-tauri/target/release/bundle/msi -maxdepth 1 -name "*.msi" 2>/dev/null | wc -l || echo "0")
+    if [ "$MSI_COUNT" -eq 0 ]; then
+        echo "[Windows] No MSI installer found in frontend/src-tauri/target/release/bundle/msi."
+        if command -v cargo >/dev/null 2>&1; then
+            echo "[Windows] Building MSI installer package with Tauri CLI..."
+            (cd frontend && npm run tauri build -- --bundles msi) || {
+                echo "[Windows] Note: MSI build failed or WiX tools not installed. Continuing to launch application..."
+            }
+        else
+            echo "[Windows] Warning: Rust/Cargo is not installed in PATH. Cannot build MSI setup."
+            echo "[Windows] Install Rust and WiX Toolset to compile the desktop installer."
+        fi
+    else
+        echo "[Windows] Existing MSI installer found:"
+        find frontend/src-tauri/target/release/bundle/msi -maxdepth 1 -name "*.msi" 2>/dev/null
+    fi
+fi
+
 echo ""
 echo "Starting Django API backend on :8000 and desktop/frontend app..."
 echo "=================================================="
