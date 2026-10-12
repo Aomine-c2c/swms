@@ -68,7 +68,22 @@ else
     "$VENV_PYTHON" -m pip install -q -r backend/requirements.txt
 fi
 
-# 4. Apply database migrations
+# 4. Ensure backend/.env exists for local development
+if [ ! -f "backend/.env" ]; then
+    echo "[Backend] Creating backend/.env from template..."
+    if [ -f "backend/.env.example" ]; then
+        cp backend/.env.example backend/.env
+    else
+        cat << 'EOF' > backend/.env
+DEBUG=True
+SECRET_KEY=django-insecure-swms-local-dev-key-change-in-production-only
+ALLOWED_HOSTS=*
+CORS_ALLOW_ALL_ORIGINS=True
+EOF
+    fi
+fi
+
+# 5. Apply database migrations
 echo "[Backend] Running database migrations..."
 "$VENV_PYTHON" backend/manage.py migrate --noinput
 

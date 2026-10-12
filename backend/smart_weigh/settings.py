@@ -12,19 +12,18 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 
 # Initialize environ
 env = environ.Env(
-    DEBUG=(bool, False)
+    DEBUG=(bool, True)
 )
 
 # Read .env file if it exists
 environ.Env.read_env(os.path.join(BASE_DIR, '.env'))
 
-# Quick-start development settings - unsuitable for production
-# Fallback to empty string to ensure it fails if not provided in production
-SECRET_KEY = env('SECRET_KEY', default='django-insecure-default-key-for-dev' if env('DEBUG', default=False) else '')
-if not SECRET_KEY:
-    raise ValueError("SECRET_KEY must be provided in production")
+DEBUG = env('DEBUG', default=True)
 
-DEBUG = env('DEBUG', default=False)
+# Quick-start development settings
+SECRET_KEY = env('SECRET_KEY', default='django-insecure-default-key-for-dev' if DEBUG else '')
+if not SECRET_KEY:
+    raise ValueError("SECRET_KEY must be provided in production (set DEBUG=True for local dev or provide SECRET_KEY in .env)")
 
 ALLOWED_HOSTS = env.list('ALLOWED_HOSTS', default=['*'] if DEBUG else [])
 
