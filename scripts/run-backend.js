@@ -20,6 +20,17 @@ function getPythonCommand() {
 const pythonBin = getPythonCommand();
 console.log(`[Backend] Using Python binary: ${pythonBin}`);
 
+// Ensure default admin credentials exist
+try {
+  const ensureAdmin = require('child_process').spawnSync(pythonBin, ['ensure_admin.py'], {
+    cwd: backendDir,
+    stdio: 'inherit',
+    shell: isWin,
+  });
+} catch (e) {
+  // Continue even if error
+}
+
 const args = ['manage.py', 'runserver', '0.0.0.0:8000'];
 const proc = spawn(pythonBin, args, {
   cwd: backendDir,

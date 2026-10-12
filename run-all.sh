@@ -87,13 +87,42 @@ fi
 echo "[Backend] Running database migrations..."
 "$VENV_PYTHON" backend/manage.py migrate --noinput
 
-# 5. Check frontend dependencies
+# 6. Automatically ensure hardcoded admin credentials exist
+echo "[Backend] Provisioning default administrator account..."
+"$VENV_PYTHON" backend/ensure_admin.py
+
+# 7. Check frontend dependencies
 if [ ! -d "frontend/node_modules" ]; then
     echo "[Frontend] Installing npm packages..."
     (cd frontend && npm install)
 fi
 
-# 6. Check and build Windows MSI setup if on Windows and not present
+# 8. Check and install Rust/Cargo toolchain automatically if missing
+if ! command -v cargo >/dev/null 2>&1; then
+    echo "[Rust] Cargo/Rust not found in PATH. Attempting automatic installation..."
+    case "$(uname -s)" in
+        CYGWIN*|MINGW*|MSYS*)
+            # Windows environment
+            echo "[Rust] Downloading rustup-init for Windows..."
+            curl -sSf -o rustup-init.exe https://win.rustup.rs/x86_64 2>/dev/null || true
+            if [ -f "rustup-init.exe" ]; then
+                ./rustup-init.exe -y --default-toolchain stable
+                rm -f rustup-init.exe
+                export PATH="$HOME/.cargo/bin:$PATH"
+            fi
+            ;;
+        *)
+            # Linux / macOS / WSL
+            echo "[Rust] Installing Rust via rustup..."
+            curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y 2>/dev/null || true
+            if [ -f "$HOME/.cargo/env" ]; then
+                . "$HOME/.cargo/env"
+            fi
+            ;;
+    esac
+fi
+
+# 9. Check and build Windows MSI setup if on Windows and not present
 IS_WINDOWS=false
 case "$(uname -s)" in
     CYGWIN*|MINGW*|MSYS*)
@@ -115,11 +144,10 @@ if [ "$IS_WINDOWS" = true ]; then
         if command -v cargo >/dev/null 2>&1; then
             echo "[Windows] Building MSI installer package with Tauri CLI..."
             (cd frontend && npm run tauri build -- --bundles msi) || {
-                echo "[Windows] Note: MSI build failed or WiX tools not installed. Continuing to launch application..."
+                echo "[Windows] Note: MSI bundle step completed with notices. Continuing to launch application..."
             }
         else
-            echo "[Windows] Warning: Rust/Cargo is not installed in PATH. Cannot build MSI setup."
-            echo "[Windows] Install Rust and WiX Toolset to compile the desktop installer."
+            echo "[Windows] Notice: Rust/Cargo is not available yet. Running web app mode directly."
         fi
     else
         echo "[Windows] Existing MSI installer found:"

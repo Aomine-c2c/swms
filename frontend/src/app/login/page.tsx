@@ -117,7 +117,33 @@ export default function LoginPage() {
           </button>
         </form>
 
-        <div className="mt-6 pt-4 border-t border-zinc-100 text-center">
+        <div className="mt-5 p-2.5 rounded-lg bg-zinc-50 border border-zinc-200 text-center">
+          <p className="text-[11px] text-zinc-500 mb-1.5 font-medium">Default Credentials:</p>
+          <div className="flex items-center justify-center gap-2">
+            <button
+              type="button"
+              onClick={() => {
+                setUsername('admin');
+                setPassword('admin123');
+              }}
+              className="text-[11px] px-2 py-0.5 rounded bg-zinc-200 hover:bg-zinc-300 text-zinc-800 font-mono transition-colors"
+            >
+              admin / admin123
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setUsername('Devine_General');
+                setPassword('password123');
+              }}
+              className="text-[11px] px-2 py-0.5 rounded bg-zinc-200 hover:bg-zinc-300 text-zinc-800 font-mono transition-colors"
+            >
+              Devine_General
+            </button>
+          </div>
+        </div>
+
+        <div className="mt-5 pt-3 border-t border-zinc-100 text-center">
           <p className="text-[10px] text-zinc-400">
             Smart-Weigh System v1.0.0 • Production Build
           </p>
