@@ -11,3 +11,5 @@ dist/
 build/
 src-tauri/target/
 db.sqlite3
+file:memorydb*
+backend/file*
