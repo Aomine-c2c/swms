@@ -3,8 +3,8 @@
   "version": "1.0.0",
   "description": "Smart-Weigh Management System",
   "scripts": {
-    "dev:frontend": "cd frontend && npm run tauri dev",
-    "dev:backend": "cd backend && (./.venv/Scripts/python.exe manage.py runserver 2>nul || ./.venv/bin/python manage.py runserver || python manage.py runserver || py manage.py runserver)",
+    "dev:frontend": "node scripts/run-frontend.js",
+    "dev:backend": "node scripts/run-backend.js",
     "dev": "concurrently -n backend,frontend -c blue,green \"npm run dev:backend\" \"npm run dev:frontend\"",
     "start:all": "bash run-all.sh"
   },
